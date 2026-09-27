@@ -62,17 +62,29 @@ jobs:
           dotnet workload install wasm-tools --skip-manifest-update
           python3 scripts/fetch-assets.py
       - name: Publish real Uno application
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts
           dotnet publish src/TextSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/TextSpace/ 2>&1 | tee artifacts/browser-build.log
           python3 scripts/collect-site.py artifacts/publish site
-      - name: Browser acceptance
+      - name: Browser acceptance against verified static publication
+        shell: bash
         run: |
+          set -euo pipefail
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-          mkdir -p test-site
-          ln -s "$PWD/site" test-site/TextSpace
-          python3 -m http.server 4173 --bind 127.0.0.1 --directory test-site > artifacts/http.log 2>&1 &
+          python3 scripts/serve-site.py site --port 0 --ready-file artifacts/server-ready.json > artifacts/http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do
+            kill -0 "$SERVER_PID" || { cat artifacts/http.log; exit 1; }
+            [ -f artifacts/server-ready.json ] && break
+            sleep 0.1
+          done
+          test -f artifacts/server-ready.json
+          node scripts/verify-publication.mjs site artifacts/server-ready.json
+          export TEXTSPACE_BASE_URL=$(node -e "console.log(require('./artifacts/server-ready.json').url)")
           npm run test:browser
       - uses: actions/upload-artifact@v4
         if: always()
@@ -80,14 +92,17 @@ jobs:
           name: TextSpace-browser-validation
           path: |
             artifacts/*.log
+            artifacts/*.json
             test-results
             package-lock.json
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: TextSpace-browser
           path: site
           include-hidden-files: true
+          if-no-files-found: ignore
   source:
     runs-on: ubuntu-latest
     steps:

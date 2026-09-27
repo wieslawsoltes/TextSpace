@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices.JavaScript;
+using System.Text;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -10,56 +11,101 @@ using Windows.Foundation;
 
 namespace TextSpace.App;
 
-/// <summary>Opt-in, read-only inspection for acceptance tests. All mutations still use real pointer and keyboard input.</summary>
+/// <summary>Read-only, opt-in browser inspection. Explicit JSON writing is safe under trimming.</summary>
 internal static partial class BrowserDiagnostics
 {
-    private static DispatcherTimer? _timer;
-    [JSImport("globalThis.TextSpaceHost.publishState")] private static partial void Publish(string json);
+    [JSImport("globalThis.TextSpaceHost.publishState")]
+    private static partial void Publish(string json);
+
     public static void Attach(WordWorkbench workbench, Window window)
     {
         if (!BrowserWorkspaceHost.DiagnosticsEnabled()) return;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        var updating = false;
         void Update()
         {
+            if (updating) return;
+            updating = true;
             try
             {
-                var controls = new List<object>();
-                void Walk(DependencyObject node, bool visible = true)
+                var session = workbench.Session;
+                var surface = workbench.Surface;
+                var origin = surface.TransformToVisual(workbench).TransformPoint(new Point());
+                using var stream = new MemoryStream();
+                using (var json = new Utf8JsonWriter(stream))
                 {
-                    if (node is UIElement ui && ui.Visibility != Visibility.Visible) return;
-                    if (node is FrameworkElement element && element.ActualWidth > 0 && element.ActualHeight > 0)
+                    json.WriteStartObject();
+                    json.WriteBoolean("ready", true);
+                    json.WriteString("runtime", "Uno WebAssembly / Skia");
+                    json.WriteString("title", session.Document.Title);
+                    json.WriteString("text", session.Document.PlainText);
+                    json.WriteNumber("pages", surface.Layout.Pages.Count);
+                    json.WriteNumber("words", session.Document.WordCount);
+                    json.WriteNumber("paragraphs", session.Document.Paragraphs().Count());
+                    json.WriteNumber("tables", session.Document.Blocks.OfType<TextSpace.Core.TableBlock>().Count());
+                    json.WriteNumber("images", session.Document.Blocks.OfType<TextSpace.Core.ImageBlock>().Count());
+                    json.WriteStartArray("comments");
+                    foreach (var comment in session.Document.Comments)
                     {
-                        var name = AutomationProperties.GetName(element);
-                        if (!string.IsNullOrEmpty(name) && (element is Button or TextBox or TextSpace.Controls.OfficeComboField))
-                        {
-                            try
-                            {
-                                var point = element.TransformToVisual(workbench).TransformPoint(new Point(0, 0));
-                                controls.Add(new { name, command = (element as RibbonButton)?.CommandId ?? "", kind = element is TextBox ? "textbox" : "button", x = point.X, y = point.Y, width = element.ActualWidth, height = element.ActualHeight, enabled = element is not Control control || control.IsEnabled });
-                            }
-                            catch { }
-                        }
+                        json.WriteStartObject(); json.WriteString("id", comment.Id); json.WriteString("text", comment.Text);
+                        json.WriteBoolean("resolved", comment.Resolved); json.WriteEndObject();
                     }
-                    for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Walk(VisualTreeHelper.GetChild(node, i), visible);
+                    json.WriteEndArray();
+                    json.WriteNumber("changes", session.Document.Changes.Count);
+                    json.WriteStartObject("selection");
+                    json.WriteNumber("start", session.Selection.Start); json.WriteNumber("end", session.Selection.End);
+                    json.WriteNumber("active", session.Selection.Active); json.WriteNumber("length", session.Selection.Length);
+                    json.WriteEndObject();
+                    json.WriteStartObject("style");
+                    json.WriteBoolean("bold", session.TypingStyle.Bold); json.WriteBoolean("italic", session.TypingStyle.Italic);
+                    json.WriteBoolean("underline", session.TypingStyle.Underline);
+                    json.WriteNumber("fontSize", session.TypingStyle.FontSize); json.WriteString("fontFamily", session.TypingStyle.FontFamily);
+                    json.WriteEndObject();
+                    json.WriteBoolean("canUndo", session.CanUndo); json.WriteBoolean("canRedo", session.CanRedo);
+                    json.WriteNumber("revision", session.Revision); json.WriteNumber("zoom", surface.Zoom);
+                    json.WriteString("selectedTab", workbench.Ribbon.SelectedTab); json.WriteString("status", workbench.StatusText);
+                    json.WriteBoolean("dialog", workbench.IsDialogOpen);
+                    json.WriteStartObject("canvas");
+                    json.WriteNumber("x", origin.X); json.WriteNumber("y", origin.Y + (surface.ShowRuler ? 25 : 0));
+                    json.WriteNumber("width", surface.ViewportWidth); json.WriteNumber("height", surface.ViewportHeight);
+                    json.WriteNumber("paperLeft", surface.PaperLeft); json.WriteNumber("scale", surface.Scale);
+                    json.WriteNumber("scrollY", surface.ScrollY); json.WriteEndObject();
+                    json.WriteStartArray("controls");
+                    void Walk(DependencyObject node)
+                    {
+                        if (node is UIElement ui && ui.Visibility != Visibility.Visible) return;
+                        if (node is FrameworkElement element && element.ActualWidth > 0 && element.ActualHeight > 0 && element is Button or TextBox)
+                        {
+                            var name = AutomationProperties.GetName(element);
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                Point point;
+                                try { point = element.TransformToVisual(workbench).TransformPoint(new Point()); }
+                                catch (InvalidOperationException) { point = new Point(-10000, -10000); }
+                                json.WriteStartObject(); json.WriteString("name", name);
+                                json.WriteString("command", (element as RibbonButton)?.CommandId ?? "");
+                                json.WriteString("kind", element is TextBox ? "textbox" : "button");
+                                json.WriteNumber("x", point.X); json.WriteNumber("y", point.Y);
+                                json.WriteNumber("width", element.ActualWidth); json.WriteNumber("height", element.ActualHeight);
+                                json.WriteBoolean("enabled", element is not Control control || control.IsEnabled); json.WriteEndObject();
+                            }
+                        }
+                        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Walk(VisualTreeHelper.GetChild(node, i));
+                    }
+                    Walk(workbench);
+                    if (workbench.XamlRoot is not null)
+                        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(workbench.XamlRoot))
+                            if (popup.Child is not null) Walk(popup.Child);
+                    json.WriteEndArray(); json.WriteEndObject();
                 }
-                Walk(workbench);
-                if (workbench.XamlRoot is not null) foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(workbench.XamlRoot)) if (popup.Child is not null) Walk(popup.Child);
-                var s = workbench.Session; var surface = workbench.Surface; var position = surface.TransformToVisual(workbench).TransformPoint(new Point(0, 0)); var caret = surface.Layout.Caret(s.Selection.Active);
-                var snapshot = new
-                {
-                    ready = true, runtime = "Uno WebAssembly / Skia", title = s.Document.Title, text = s.Document.PlainText,
-                    pages = surface.Layout.Pages.Count, words = s.Document.WordCount, paragraphs = s.Document.Paragraphs().Count(), tables = s.Document.Blocks.OfType<TextSpace.Core.TableBlock>().Count(), images = s.Document.Blocks.OfType<TextSpace.Core.ImageBlock>().Count(),
-                    comments = s.Document.Comments.Select(c => new { c.Id, c.Text, c.Resolved }).ToArray(), changes = s.Document.Changes.Count,
-                    selection = new { start = s.Selection.Start, end = s.Selection.End, active = s.Selection.Active, length = s.Selection.Length },
-                    style = new { bold = s.TypingStyle.Bold, italic = s.TypingStyle.Italic, underline = s.TypingStyle.Underline, fontSize = s.TypingStyle.FontSize, fontFamily = s.TypingStyle.FontFamily },
-                    canUndo = s.CanUndo, canRedo = s.CanRedo, revision = s.Revision, zoom = surface.Zoom, selectedTab = workbench.Ribbon.SelectedTab, status = workbench.StatusText, dialog = workbench.IsDialogOpen,
-                    canvas = new { x = position.X, y = position.Y + (surface.ShowRuler ? 25 : 0), width = surface.ViewportWidth, height = surface.ViewportHeight, paperLeft = surface.PaperLeft, scale = surface.Scale, scrollY = surface.ScrollY },
-                    caret = new { x = caret.X, y = caret.Y, page = caret.PageIndex, height = caret.Height },
-                    controls
-                };
-                Publish(JsonSerializer.Serialize(snapshot));
+                Publish(Encoding.UTF8.GetString(stream.ToArray()));
             }
-            catch (Exception ex) { Console.Error.WriteLine("TextSpace diagnostics: " + ex.Message); }
+            catch (Exception error) { Console.Error.WriteLine("TextSpace diagnostics: " + error.Message); }
+            finally { updating = false; }
         }
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) }; _timer.Tick += (_, _) => Update(); _timer.Start(); workbench.StateChanged += Update; Update();
+        timer.Tick += (_, _) => Update();
+        timer.Start();
+        window.Closed += (_, _) => timer.Stop();
+        Update();
     }
 }
