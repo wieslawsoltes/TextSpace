@@ -6,13 +6,16 @@ public sealed partial class WordWorkbench
     {
         Ribbon.InsertGroup("Layout", 2, () => Group("Text Layout",
             Tool("ruler", "Tabs", "tab-stops", true), Tool("paragraph", "Pagination", "pagination", true)));
-        Ribbon.InsertGroup("Insert", 4, () => Group("Special Characters",
-            MenuButton("symbol", "Special Characters", new OfficeMenu()
+        Ribbon.InsertGroup("Insert", 4, () =>
+        {
+            var menu = new OfficeMenu()
                 .Add("Tab character", () => RunEdit("Insert tab", () => Session.InsertText("\t")))
                 .Add("Nonbreaking space", () => RunEdit("Nonbreaking space", () => Session.InsertText("\u00a0")))
                 .Add("Nonbreaking hyphen", () => RunEdit("Nonbreaking hyphen", () => Session.InsertText("\u2011")))
                 .Add("Optional hyphen", () => RunEdit("Optional hyphen", () => Session.InsertText("\u00ad")))
-                .Add("Zero-width break", () => RunEdit("Zero-width break", () => Session.InsertText("\u200b")))));
+                .Add("Zero-width break", () => RunEdit("Zero-width break", () => Session.InsertText("\u200b")));
+            return Group("Special Characters", MenuButton("symbol", "Special Characters", menu));
+        });
     }
 
     private async Task TabStopsAsync()
