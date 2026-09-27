@@ -18,6 +18,18 @@ public sealed class LayoutChunk
     public double X { get; set; }
     public double Width { get; set; }
     public double[] Carets { get; init; } = [0];
+    private int[]? _boundaries;
+    internal ReadOnlySpan<int> CaretOffsets
+    {
+        get
+        {
+            if (_boundaries is not null) return _boundaries;
+            var offsets = System.Globalization.StringInfo.ParseCombiningCharacters(Text);
+            _boundaries = new int[offsets.Length + 1];
+            offsets.CopyTo(_boundaries, 0); _boundaries[^1] = Text.Length;
+            return _boundaries;
+        }
+    }
     public double Position(int offset) => X + Carets[Math.Clamp(offset, 0, Text.Length)] * (Carets[^1] > 0 ? Width / Carets[^1] : 1);
 }
 
@@ -41,7 +53,12 @@ public sealed class LayoutLine
     public double CaretX(int position)
     {
         if (Chunks.Count == 0) return X;
-        var chunk = Chunks.LastOrDefault(c => position >= c.Start && position <= c.End) ?? (position < Start ? Chunks[0] : Chunks[^1]);
+        for (var i = Chunks.Count - 1; i >= 0; i--)
+        {
+            var candidate = Chunks[i];
+            if (position >= candidate.Start && position <= candidate.End) return candidate.Position(position - candidate.Start);
+        }
+        var chunk = position < Start ? Chunks[0] : Chunks[^1];
         return chunk.Position(position - chunk.Start);
     }
     public int HitTest(double x)
@@ -50,8 +67,7 @@ public sealed class LayoutLine
         var best = Start; var distance = double.MaxValue;
         foreach (var chunk in Chunks)
         {
-            var boundaries = System.Globalization.StringInfo.ParseCombiningCharacters(chunk.Text).Append(chunk.Text.Length);
-            foreach (var offset in boundaries)
+            foreach (var offset in chunk.CaretOffsets)
             {
                 var d = Math.Abs(chunk.Position(offset) - x);
                 if (d < distance) { distance = d; best = chunk.Start + offset; }
@@ -89,7 +105,7 @@ public sealed class LayoutPage(int index, PageSettings settings)
 public readonly record struct CaretGeometry(int PageIndex, double X, double Y, double Height);
 
 /// <summary>Immutable page geometry index supporting mixed paper sizes and logarithmic page lookup.</summary>
-public sealed class DocumentLayout
+public sealed partial class DocumentLayout
 {
     public const double PageGap = 24;
     private readonly double[] _pageTops;
@@ -107,6 +123,7 @@ public sealed class DocumentLayout
         _pageTops = new double[pages.Count]; var top = 0d;
         for (var i = 0; i < pages.Count; i++) { _pageTops[i] = top; top += pages[i].Settings.Height + PageGap; }
         Height = top - PageGap; _lines = pages.SelectMany(p => p.Lines).ToArray();
+        BuildTextLookup();
     }
     public double PageTop(int index) => _pageTops[Math.Clamp(index, 0, _pageTops.Length - 1)];
     public double PageLeft(int index) => (Width - Pages[Math.Clamp(index, 0, Pages.Count - 1)].Settings.Width) / 2;
@@ -118,7 +135,7 @@ public sealed class DocumentLayout
     }
     public CaretGeometry Caret(int position)
     {
-        var line = _lines.LastOrDefault(l => position >= l.Start && position <= l.End) ?? _lines.LastOrDefault();
+        var line = FindCaretLine(position);
         return line is null ? new(0, Settings.MarginLeft, Settings.MarginTop, 14) : new(line.PageIndex, line.CaretX(position), line.Y, line.Height);
     }
     public FieldPageInfo FieldPageAt(int position)
@@ -130,8 +147,7 @@ public sealed class DocumentLayout
     {
         var pageIndex = PageAtY(documentY); var y = documentY - PageTop(pageIndex); var page = Pages[pageIndex];
         x -= PageLeft(pageIndex);
-        var line = page.Lines.OrderBy(l => (y < l.Y ? l.Y - y : y > l.Y + l.Height ? y - l.Y - l.Height : 0) * 10000
-            + (x < l.X ? l.X - x : x > l.X + l.Width ? x - l.X - l.Width : 0)).FirstOrDefault();
+        var line = NearestLine(page.Lines, x, y);
         if (line is not null) return line.HitTest(x);
         // A deliberately blank parity page should not jump to the document's end.
         return _lines.LastOrDefault(l => l.PageIndex < pageIndex)?.End ?? _lines.FirstOrDefault()?.Start ?? 0;

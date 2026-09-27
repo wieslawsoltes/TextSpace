@@ -5,10 +5,11 @@ namespace TextSpace.Layout;
 /// <summary>Flow layout in points. Paragraphs split at line boundaries; table rows split only when taller than a page.</summary>
 public sealed class PageLayoutEngine(ITextMetrics metrics)
 {
+    public ParagraphLayoutCache ParagraphCache { get; } = new(metrics);
     public DocumentLayout Layout(DocumentModel document)
     {
         var section = DocumentSections.Resolve(DocumentSections.First(document), null);
-        var settings = section.Page; var index = new TextIndex(document); var layouter = new ParagraphLayouter(metrics);
+        var settings = section.Page; var index = new TextIndex(document); var layouter = ParagraphCache;
         var pages = new List<LayoutPage>(); var sectionIndex = 0; var sectionPage = 0;
         var pageNumber = section.Options.PageNumberStart ?? 1;
         LayoutPage NewPage(bool parityBlank = false)

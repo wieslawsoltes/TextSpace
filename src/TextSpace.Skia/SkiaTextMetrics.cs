@@ -7,7 +7,7 @@ using TextSpace.Layout;
 namespace TextSpace.Skia;
 
 /// <summary>Single-threaded font/shaper cache. Hosts can register openly licensed or user-provided typefaces.</summary>
-public sealed class SkiaTextMetrics : ITextMetrics, IDisposable
+public sealed class SkiaTextMetrics : IVersionedTextMetrics, IDisposable
 {
     private readonly Dictionary<(string Family, bool Bold, bool Italic), SKTypeface> _faces = [];
     private readonly Dictionary<(string Family, bool Bold, bool Italic), SKShaper> _shapers = [];
@@ -20,8 +20,12 @@ public sealed class SkiaTextMetrics : ITextMetrics, IDisposable
         var key = (family, bold, italic); if (_shapers.Remove(key, out var shaper)) shaper.Dispose();
         _faces[key] = face; _owned.Add(face); ClearMeasurements();
     }
+    public long MetricsVersion { get; private set; }
     public void ClearMeasurements()
     {
+        MetricsVersion++;
+        foreach (var cachedShaper in _shapers.Values) cachedShaper.Dispose();
+        _shapers.Clear();
         _measurements.Clear(); foreach (var font in _fonts.Values) font.Dispose(); _fonts.Clear();
     }
     private (string, bool, bool) Key(TextStyle style) => (style.FontFamily, style.Bold, style.Italic);
