@@ -1,0 +1,12 @@
+global using Microsoft.UI.Xaml;
+global using Microsoft.UI.Xaml.Controls;
+global using Microsoft.UI.Xaml.Input;
+global using Microsoft.UI.Xaml.Media;
+global using Microsoft.UI.Xaml.Automation;
+global using Microsoft.UI.Xaml.Controls.Primitives;
+global using Windows.Foundation;
+global using Windows.System;
+global using TextSpace.Controls;
+global using TextSpace.Core;
+global using TextSpace.Documents;
+global using TextSpace.Editing;

@@ -1,0 +1,134 @@
+using System.Text;
+using System.Xml.Linq;
+using TextSpace.Core;
+using static TextSpace.OpenXml.Ooxml;
+
+namespace TextSpace.OpenXml;
+
+public sealed partial class DocxWriter
+{
+    private IEnumerable<XElement> Blocks(IEnumerable<Block> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            switch (block)
+            {
+                case Paragraph p: yield return Paragraph(p); break;
+                case PageBreakBlock: yield return E("p", E("r", E("br", new XAttribute(W + "type", "page")))); break;
+                case ImageBlock image: yield return Picture(image); break;
+                case TableBlock table: yield return Table(table); break;
+            }
+        }
+    }
+
+    private XElement Paragraph(Paragraph paragraph)
+    {
+        var result = E("p", ParagraphProperties(paragraph.Format)); var start = _index.StartOf(paragraph); var position = 0;
+        void Mark(int offset)
+        {
+            foreach (var (comment, id) in _document.Comments.Select((c, i) => (c, i)))
+            {
+                if (comment.Start == start + offset) result.Add(E("commentRangeStart", new XAttribute(W + "id", id)));
+                if (comment.End == start + offset) result.Add(E("commentRangeEnd", new XAttribute(W + "id", id)), E("r", E("commentReference", new XAttribute(W + "id", id))));
+            }
+        }
+        Mark(0);
+        foreach (var run in paragraph.Runs)
+        {
+            var boundaries = _document.Comments.SelectMany(c => new[] { c.Start - start, c.End - start }).Where(i => i > position && i < position + run.Text.Length).Append(position + run.Text.Length).Distinct().Order().ToArray();
+            var at = position;
+            foreach (var end in boundaries)
+            {
+                var content = Run(run.Text.Substring(at - position, end - at), run.Style); var link = SafeLink(run.Style.Hyperlink);
+                if (link?.StartsWith('#') == true) result.Add(E("hyperlink", new XAttribute(W + "anchor", link[1..]), content));
+                else if (link is not null) result.Add(E("hyperlink", new XAttribute(R + "id", Relate("hyperlink", link, true)), content));
+                else result.Add(content);
+                at = end; Mark(end);
+            }
+            position += run.Text.Length;
+        }
+        if (paragraph.Runs.Count == 0) result.Add(E("r", RunProperties(paragraph.DefaultStyle)));
+        return result;
+    }
+
+    internal static XElement Run(string text, TextStyle style)
+    {
+        var result = E("r", RunProperties(style)); var buffer = new StringBuilder();
+        void Flush() { if (buffer.Length > 0) { result.Add(E("t", new XAttribute(XNamespace.Xml + "space", "preserve"), buffer.ToString())); buffer.Clear(); } }
+        foreach (var c in text)
+        {
+            if (c is '\t' or '\u2028') { Flush(); result.Add(E(c == '\t' ? "tab" : "br")); }
+            else buffer.Append(c);
+        }
+        Flush(); return result;
+    }
+
+    internal static XElement RunProperties(TextStyle style) => E("rPr",
+        E("rFonts", new XAttribute(W + "ascii", style.FontFamily), new XAttribute(W + "hAnsi", style.FontFamily), new XAttribute(W + "cs", style.FontFamily)),
+        style.Bold ? E("b") : null, style.Italic ? E("i") : null, style.StrikeThrough ? E("strike") : null,
+        E("color", V(Hex(style.Color))), E("sz", V((int)Math.Round(style.FontSize * 2))), E("szCs", V((int)Math.Round(style.FontSize * 2))),
+        style.Underline || style.Hyperlink is not null ? E("u", V("single")) : null,
+        style.Highlight is not null ? E("shd", V("clear"), new XAttribute(W + "fill", Hex(style.Highlight))) : null,
+        style.Superscript || style.Subscript ? E("vertAlign", V(style.Superscript ? "superscript" : "subscript")) : null);
+
+    internal static XElement ParagraphProperties(ParagraphFormat format, bool includeStyle = true) => E("pPr",
+        includeStyle ? E("pStyle", V(format.StyleName.Replace(" ", ""))) : null,
+        format.KeepWithNext ? E("keepNext") : null, format.PageBreakBefore ? E("pageBreakBefore") : null,
+        format.List != ListKind.None ? E("numPr", E("ilvl", V(format.ListLevel)), E("numId", V(format.List == ListKind.Bullet ? 1 : 2))) : null,
+        format.BorderBottom ? E("pBdr", E("bottom", V("single"), new XAttribute(W + "sz", 4), new XAttribute(W + "color", "8E9EAD"))) : null,
+        format.Shading is not null ? E("shd", V("clear"), new XAttribute(W + "fill", Hex(format.Shading))) : null,
+        E("spacing", new XAttribute(W + "before", Twips(format.SpaceBefore)), new XAttribute(W + "after", Twips(format.SpaceAfter)), new XAttribute(W + "line", (int)Math.Round(format.LineSpacing * 240)), new XAttribute(W + "lineRule", "auto")),
+        E("ind", new XAttribute(W + "left", Twips(format.LeftIndent + (format.List != ListKind.None ? 18 : 0))), new XAttribute(W + "right", Twips(format.RightIndent)), format.FirstLineIndent >= 0 ? new XAttribute(W + "firstLine", Twips(format.FirstLineIndent)) : new XAttribute(W + "hanging", Twips(-format.FirstLineIndent))),
+        E("jc", V(format.Alignment == TextAlignment.Justify ? "both" : format.Alignment.ToString().ToLowerInvariant())),
+        format.OutlineLevel > 0 ? E("outlineLvl", V(format.OutlineLevel - 1)) : null);
+
+    private static XElement HeaderFooter(string text, bool centered = false)
+    {
+        var paragraph = E("p", E("pPr", E("jc", V(centered ? "center" : "left")))); var style = new TextStyle { FontSize = 8, Color = "#777777" };
+        foreach (var part in System.Text.RegularExpressions.Regex.Split(text, @"(\{PAGE\}|\{NUMPAGES\})"))
+            paragraph.Add(part is "{PAGE}" or "{NUMPAGES}" ? E("fldSimple", new XAttribute(W + "instr", part.Trim('{', '}')), Run("1", style)) : Run(part, style));
+        return paragraph;
+    }
+
+    private XElement Table(TableBlock table)
+    {
+        var count = table.Rows.Max(r => r.Cells.Count);
+        var weights = table.ColumnWidths.Count == count && table.ColumnWidths.All(w => w > 0 && double.IsFinite(w)) ? table.ColumnWidths.ToArray() : Enumerable.Repeat(1d, count).ToArray();
+        var widths = weights.Select(w => Twips(_document.Page.ColumnWidth * w / weights.Sum())).ToArray();
+        var borders = E("tblBorders", new[] { "top", "left", "bottom", "right", "insideH", "insideV" }.Select(side => E(side, V("single"), new XAttribute(W + "sz", 4), new XAttribute(W + "color", "A8B7C8"))));
+        var margins = E("tblCellMar", new[] { "top", "left", "bottom", "right" }.Select(side => E(side, new XAttribute(W + "w", Twips(table.CellPadding)), new XAttribute(W + "type", "dxa"))));
+        var properties = E("tblPr", E("tblW", new XAttribute(W + "w", widths.Sum()), new XAttribute(W + "type", "dxa")), borders, E("tblLayout", new XAttribute(W + "type", "fixed")), margins);
+        var result = E("tbl", properties, E("tblGrid", widths.Select(w => E("gridCol", new XAttribute(W + "w", w)))));
+        for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
+        {
+            var row = E("tr", table.HeaderRow && rowIndex == 0 ? E("trPr", E("tblHeader")) : null);
+            for (var column = 0; column < table.Rows[rowIndex].Cells.Count; column++)
+            {
+                var cell = table.Rows[rowIndex].Cells[column];
+                var fill = cell.Shading ?? (table.HeaderRow && rowIndex == 0 ? "#D9E5F5" : table.BandedRows && rowIndex % 2 == 0 ? "#F3F6FA" : null);
+                var cellProperties = E("tcPr", E("tcW", new XAttribute(W + "w", widths[column]), new XAttribute(W + "type", "dxa")), fill is null ? null : E("shd", V("clear"), new XAttribute(W + "fill", Hex(fill))));
+                var element = E("tc", cellProperties, Blocks(cell.Blocks));
+                if (cell.Blocks.LastOrDefault() is not Paragraph) element.Add(E("p")); row.Add(element);
+            }
+            result.Add(row);
+        }
+        return result;
+    }
+
+    private XElement Picture(ImageBlock image)
+    {
+        var extension = image.ContentType == "image/jpeg" ? "jpg" : image.ContentType == "image/gif" ? "gif" : "png";
+        var path = "media/image" + (_media.Count + 1) + "." + extension; var id = Relate("image", path); _media.Add((path, image.Data, image.ContentType));
+        var cx = (long)(image.Width * 12700); var cy = (long)(image.Height * 12700);
+        var nonVisual = new XElement(Pic + "nvPicPr", new XElement(Pic + "cNvPr", new XAttribute("id", 0), new XAttribute("name", image.AltText)), new XElement(Pic + "cNvPicPr"));
+        var fill = new XElement(Pic + "blipFill", new XElement(A + "blip", new XAttribute(R + "embed", id)), new XElement(A + "stretch", new XElement(A + "fillRect")));
+        var transform = new XElement(A + "xfrm", new XElement(A + "off", new XAttribute("x", 0), new XAttribute("y", 0)), new XElement(A + "ext", new XAttribute("cx", cx), new XAttribute("cy", cy)));
+        var shape = new XElement(Pic + "spPr", transform, new XElement(A + "prstGeom", new XAttribute("prst", "rect"), new XElement(A + "avLst")));
+        var picture = new XElement(Pic + "pic", nonVisual, fill, shape);
+        var inline = new XElement(Wp + "inline", new XElement(Wp + "extent", new XAttribute("cx", cx), new XAttribute("cy", cy)),
+            new XElement(Wp + "docPr", new XAttribute("id", _media.Count), new XAttribute("name", "Picture " + _media.Count), new XAttribute("descr", image.AltText)),
+            new XElement(Wp + "cNvGraphicFramePr", new XElement(A + "graphicFrameLocks", new XAttribute("noChangeAspect", 1))),
+            new XElement(A + "graphic", new XElement(A + "graphicData", new XAttribute("uri", Pic.NamespaceName), picture)));
+        return E("p", E("pPr", E("jc", V(image.Alignment.ToString().ToLowerInvariant()))), E("r", E("drawing", inline)));
+    }
+}

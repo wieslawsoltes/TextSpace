@@ -1,0 +1,8 @@
+<Project Sdk="Uno.Sdk">
+ <PropertyGroup>
+  <TargetFrameworks>net10.0-browserwasm;net10.0-desktop</TargetFrameworks><TargetFrameworks Condition="'$(TextSpaceDesktopOnly)' == 'true'">net10.0-desktop</TargetFrameworks>
+  <UnoSingleProject>true</UnoSingleProject><OutputType>Library</OutputType><GenerateLibraryLayout>true</GenerateLibraryLayout><UnoFeatures>SkiaRenderer;</UnoFeatures><IsPackable>true</IsPackable>
+  <Description>Composable Word-style Uno workbench, ribbon commands, backstage, navigation and review workflows.</Description>
+ </PropertyGroup>
+ <ItemGroup><ProjectReference Include="../TextSpace.Editor/TextSpace.Editor.csproj" /><ProjectReference Include="../TextSpace.OpenXml/TextSpace.OpenXml.csproj" /><ProjectReference Include="../TextSpace.Storage/TextSpace.Storage.csproj" /></ItemGroup>
+</Project>
