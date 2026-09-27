@@ -1,0 +1,64 @@
+name: Materialize sections and fields
+on:
+  push:
+    branches: [feat/sections-fields]
+    paths: ['.github/workflows/apply-sections-fields.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/sections-fields
+          fetch-depth: 0
+      - name: Reconstruct and verify tested source patches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,concurrent.futures,gzip,hashlib,json,os,pathlib,urllib.request
+          base='https://api.github.com/repos/'+os.environ['REPOSITORY']+'/git/'
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','User-Agent':'TextSpace-source-materialization'}
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(base+path,headers=headers),timeout=60) as response:
+                  return json.load(response)
+          def blob(sha):
+              item=get('blobs/'+sha)
+              data=base64.b64decode(item['content'])
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              if actual!=sha: raise RuntimeError('Blob integrity mismatch: '+sha)
+              return data
+          packed=[blob(s) for s in ['51218abf849b0d6b81e5dbfdde4085356fb330c9','e61a354d5d3e1a01bc4855cb64a501f83d7d87fe','52110c2712ff88ede6f4d2632bbf8ce6d0dda9c2']]
+          packed.append(b''.join(blob(s) for s in ['87c4d28e5f091dd64260c3b286072e1b44127dc8','3192805ea6973cdb3439c38ef31b89c106b81e39','dbf45e466d70ccdd184c2f0970becb85bdba2dea','5bd4a0921992df6d6e66623778250fada78e67b0']))
+          trees=['f9dfb72fa82752baa6670b25242d02146bd34010','805ee73e0d3cfc29d7d4e34a0cb389c18e082523','94a60efbbc91a91779042c59142dc95b16ece6d6','6e12865e38232db50e5e13c1ecb51018308df017','c86577a68c7aba5eb48e553bcb4e05d4261dd623','c547eff55b7b3dfcd099494c280ca849bfe5d784','58f7ee9ea071329d4216e0a0c64b54b2cd62a333','857199f4d1860821b4d83ce0089cf794d759a51b','cc096d5cd0d95a347c5d7e4d264d33de6d7cb33c','1a49caf0f8fff9bd2c630da456bd700005cae772','06a2607e663fed71dfcf77b2e9102ae86afceb90','0c90210029389c9a8af29ca384957662b5b83b69','2cb128aa5861da7c7cb24fe1e3c9276153d28a40']
+          entries=[entry for sha in trees for entry in get('trees/'+sha)['tree']]
+          def read(entry): return entry['path'],blob(entry['sha']).decode('ascii')
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+              parts=dict(executor.map(read,entries))
+          for number in range(4,10):
+              text=''.join(parts[name] for name in sorted(parts) if name.startswith(f'p{number:02d}-'))
+              packed.append(base64.b64decode(text,validate=True))
+          expected=['af661a08db55a896e216ec9583a6c591713bed11ae08b0a0c670047ca38d82c9','66b92eb93bf8cb53819a299966ac2bdf6b565f8825a20f7c748c3c312c041449','b8955cf933c9a14c172ec39a5c0dd94f1af66d97fc879072946ba8dd22d1ed87','932f5abef690666894cc10db0d8aec5029faf36bd8490924bd1760f49bc34db2','a72ba60216940afa275660936b91e12244819d8c4c18fa4beaa1ff723314bbfa','2112c2bed74b75b07f30474f36d3cb4b68c45d16ed2cc7bb6163d5c222f84fac','2db2051aa97471390b065fc0fafd6b2bfc5e06a111618a1f4fd67e942ca573fe','429074b1a4cd86433b6801a59a3db0a93b499432687da94ff973266da1bedfb2','953a57c9a03d8449692a465a27442186e3cce88d84afeaa21d302fec3fb8b484','afccf6f6d4a758d7b9c48d62e23ff458044d000203c531a8b2b6d355f6167889']
+          root=pathlib.Path('/tmp/textspace-patches');root.mkdir()
+          for i,(content,digest) in enumerate(zip(packed,expected,strict=True)):
+              patch=gzip.decompress(content)
+              if hashlib.sha256(patch).hexdigest()!=digest: raise RuntimeError(f'Patch {i} integrity mismatch')
+              (root/f'{i:02d}.patch').write_bytes(patch)
+              print(f'Verified patch {i:02d}: {len(patch)} bytes, SHA256 {digest}',flush=True)
+          PY
+          for patch in /tmp/textspace-patches/*.patch; do git apply --unidiff-zero --index "$patch"; done
+          git rm .github/workflows/development-environment.yml .github/workflows/apply-sections-fields.yml
+          git diff --cached --check
+          TREE=$(git write-tree)
+          test "$TREE" = cec4f2c3a0d38bd5e37e5ced565be6bcc6dd276f || { echo "Unexpected source tree: $TREE"; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: add mixed-page sections, live fields and linked contents'
+          git push origin HEAD:feat/sections-fields
+          git show --stat --oneline HEAD
