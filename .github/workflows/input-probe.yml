@@ -14,57 +14,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 48bab8c1bfe82a94113ba8e5c46e7ca05c62fb3d
+          ref: 172ac289ddfe7e13e484cb425e36354071c6c8e7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - uses: actions/download-artifact@v4
         with:
           name: TextSpace-browser
-          run-id: 36325048171
+          run-id: 36327289938
           github-token: ${{ github.token }}
           path: site
       - run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
-      - name: Verify key dispatch ownership
+      - name: Capture native exception ordering
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
           python3 scripts/serve-site.py site --port 4173 > artifacts/http.log 2>&1 &
           PID=$!; trap 'kill "$PID" || true' EXIT
-          cat > physical-input.mjs <<'JS'
-          import assert from 'node:assert/strict';
+          cat > native-trace.mjs <<'JS'
           import { chromium } from '@playwright/test';
           import fs from 'node:fs/promises';
           const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
           const page=await browser.newPage({viewport:{width:1440,height:1000}});
-          const report={checks:[]};
-          const waitText=async text=>page.waitForFunction(text=>globalThis.__textSpaceState?.text===text,text,{timeout:15000});
-          const ready=async text=>page.waitForFunction(text=>document.activeElement?.id==='uno-input'&&document.activeElement.value===text,text,{timeout:15000});
+          let phase='startup'; const report={errors:[],console:[],events:[]};
+          page.on('pageerror',e=>report.errors.push({phase,message:e.message,stack:e.stack}));
+          page.on('console',m=>{if(m.type()==='error')report.console.push({phase,text:m.text()});});
+          await page.addInitScript(()=>{
+            globalThis.__inputTrace=[];
+            for(const event of ['keydown','keyup','beforeinput','input','focusin','focusout']) document.addEventListener(event,e=>__inputTrace.push({type:event,key:e.key,data:e.data,inputType:e.inputType,value:e.target.value,start:e.target.selectionStart,end:e.target.selectionEnd,active:document.activeElement?.id}),true);
+          });
           const click=async name=>{
             await page.waitForFunction(name=>__textSpaceState.controls.some(c=>c.name===name&&c.width>0),name);
             const c=await page.evaluate(name=>__textSpaceState.controls.find(c=>c.name===name&&c.width>0),name);
             await page.mouse.click(c.x+c.width/2,c.y+c.height/2);await page.waitForTimeout(300);
           };
+          const step=async(name,action)=>{phase=name;await action();await page.waitForTimeout(150);};
           try{
             await page.goto('http://127.0.0.1:4173/TextSpace/?test=1');
             await page.waitForFunction(()=>globalThis.__textSpaceState?.canvas.width>200,null,{timeout:120000});
-            await click('File tab');await click('Blank document template');await ready('');
-            await page.keyboard.type('rapid input',{delay:0});await waitText('rapid input');report.checks.push('physical keyboard character burst');
-            await page.keyboard.press('Enter');await waitText('rapid input\n');report.checks.push('one Enter one paragraph');
-            await page.keyboard.type('ABC',{delay:5});await waitText('rapid input\nABC');
-            await page.keyboard.press('Backspace');await waitText('rapid input\nAB');report.checks.push('one Backspace one character');
-            await page.keyboard.press('ArrowLeft');await page.keyboard.press('Delete');await waitText('rapid input\nA');report.checks.push('one Delete one character');
-            await page.keyboard.press('Control+a');await page.keyboard.press('Backspace');await waitText('');await ready('');
-            await page.keyboard.insertText('A👩‍💻B');await waitText('A👩‍💻B');
-            await page.keyboard.press('ArrowLeft');await page.keyboard.press('Backspace');await waitText('AB');report.checks.push('emoji grapheme deletion');
-            await page.keyboard.press('Control+z');await waitText('A👩‍💻B');report.checks.push('document undo independent of native undo');
-            await page.keyboard.press('Control+y');await waitText('AB');report.checks.push('document redo independent of native redo');
-            report.success=true;
-          }catch(e){report.error=String(e.stack);report.success=false;process.exitCode=1;}
-          finally{report.state=await page.evaluate(()=>globalThis.__textSpaceState);await fs.writeFile('artifacts/physical-input.json',JSON.stringify(report,null,2));console.log(JSON.stringify({success:report.success,checks:report.checks,error:report.error}));await browser.close();}
+            await click('File tab');await click('Blank document template');
+            await page.waitForFunction(()=>document.activeElement?.id==='uno-input'&&document.activeElement.value==='');
+            await step('physical characters',()=>page.keyboard.type('rapid input',{delay:0}));
+            await step('Enter',()=>page.keyboard.press('Enter'));
+            await step('ABC',()=>page.keyboard.type('ABC',{delay:0}));
+            await step('Backspace',()=>page.keyboard.press('Backspace'));
+            await step('Left',()=>page.keyboard.press('ArrowLeft'));
+            await step('Delete',()=>page.keyboard.press('Delete'));
+            await step('Select all',()=>page.keyboard.press('Control+a'));
+            await step('Delete all',()=>page.keyboard.press('Backspace'));
+            await step('Insert emoji',()=>page.keyboard.insertText('A👩‍💻B'));
+            await step('Left emoji',()=>page.keyboard.press('ArrowLeft'));
+            await step('Delete emoji',()=>page.keyboard.press('Backspace'));
+            await step('Undo',()=>page.keyboard.press('Control+z'));
+            await step('Redo',()=>page.keyboard.press('Control+y'));
+          }catch(e){report.failure=String(e.stack);}
+          finally{report.events=await page.evaluate(()=>globalThis.__inputTrace);report.state=await page.evaluate(()=>globalThis.__textSpaceState);await fs.writeFile('artifacts/native-trace.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report.errors,null,2));await browser.close();}
           JS
-          node physical-input.mjs
+          node native-trace.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
