@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>Validated native document serialization, templates and HTML/text interchange.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../TextSpace.Core/TextSpace.Core.csproj" /></ItemGroup></Project>

@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>UI-independent rich document model, typography, tables, selections and text indexing.</Description></PropertyGroup></Project>

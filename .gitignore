@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+artifacts/
+site/
+node_modules/
+playwright-report/
+test-results/
+*.user
+*.nupkg
+*.snupkg
+src/TextSpace.App/Assets/Fonts/*.ttf

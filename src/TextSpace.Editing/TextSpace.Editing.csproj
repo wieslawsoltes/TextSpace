@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>Transactional rich-text editing, Unicode selection, history, formatting and document commands.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../TextSpace.Documents/TextSpace.Documents.csproj" /></ItemGroup></Project>
