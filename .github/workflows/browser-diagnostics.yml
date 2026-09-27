@@ -18,7 +18,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh run download 36317737139 --name TextSpace-browser-validation --dir report
+          gh run download 36318624090 --name TextSpace-browser-validation --dir report
           python3 - <<'PY'
           import json,pathlib
           report=json.loads(pathlib.Path('report/test-results/report.json').read_text())
