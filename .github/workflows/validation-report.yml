@@ -1,0 +1,67 @@
+name: Validation report
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: textspace-validation-report
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build and test
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/textspace-report"
+          R="$RUNNER_TEMP/textspace-report"
+          git rev-parse HEAD > "$R/commit.txt"
+          ENGINE=0; UI=0
+          dotnet test tests/TextSpace.Tests/TextSpace.Tests.csproj -c Release --logger 'trx;LogFileName=engine.trx' --results-directory "$R" > "$R/engine.log" 2>&1 || ENGINE=$?
+          dotnet build src/TextSpace.Workbench/TextSpace.Workbench.csproj -c Release -p:TextSpaceDesktopOnly=true > "$R/workbench.log" 2>&1 || UI=$?
+          printf 'Engine exit code: %s\nWorkbench exit code: %s\n' "$ENGINE" "$UI" > "$R/result.txt"
+          cat "$R/result.txt" "$R/engine.log" "$R/workbench.log"
+          git archive --format=zip --output="$R/source.zip" HEAD
+      - uses: actions/upload-artifact@v4
+        id: report
+        if: always()
+        with:
+          name: TextSpace-validation-report
+          path: ${{ runner.temp }}/textspace-report
+      - name: Publish readable validation report
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.report.outputs.artifact-id }}
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error,pathlib
+          base='https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']
+          headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'TextSpace-validation'}
+          def api(path,data=None,method=None):
+              request=urllib.request.Request(base+path,headers=headers,data=json.dumps(data).encode() if data is not None else None,method=method)
+              with urllib.request.urlopen(request,timeout=45) as response: return json.load(response)
+          report=pathlib.Path(os.environ['RUNNER_TEMP'])/'textspace-report'
+          (report/'run.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'run':os.environ['GITHUB_RUN_ID'],'artifact':os.environ.get('ARTIFACT_ID','')},indent=2))
+          files=[]
+          for file in report.iterdir():
+              if file.suffix in ('.log','.txt','.json'):
+                  files.append({'path':file.name,'mode':'100644','type':'blob','content':file.read_text(errors='replace')[-400000:]})
+          tree=api('/git/trees',{'tree':files})
+          try: parent=api('/git/ref/heads/validation-report')['object']['sha']
+          except urllib.error.HTTPError as error:
+              if error.code!=404: raise
+              parent=None
+          commit=api('/git/commits',{'message':'Validation of '+os.environ['GITHUB_SHA'],'tree':tree['sha'],'parents':[parent] if parent else []})
+          if parent: api('/git/refs/heads/validation-report',{'sha':commit['sha']},'PATCH')
+          else: api('/git/refs',{'ref':'refs/heads/validation-report','sha':commit['sha']})
+          print('Published validation report for',os.environ['GITHUB_SHA'])
+          PY
