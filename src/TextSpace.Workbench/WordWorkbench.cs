@@ -25,6 +25,7 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
     private StyleGallery? _styleGallery;
     private Grid? _titleBar;
     private Border? _backstage;
+    private bool _nativeUiRefreshPending;
     private bool _disposed, _autoSave = true, _focusMode, _busy, _reviewVisible, _navigationVisible;
     private string _navigationMode = "Headings", _reviewMode = "Comments";
     private string _searchQuery = "", _replaceText = "";
@@ -45,7 +46,7 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
         FontFamily = OfficeTheme.Font; RequestedTheme = ElementTheme.Light;
         _workspace.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); _workspace.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); _workspace.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         Grid.SetColumn(_navigationHost, 0); Grid.SetColumn(Surface, 1); Grid.SetColumn(_reviewHost, 2); _workspace.Children.Add(_navigationHost); _workspace.Children.Add(Surface); _workspace.Children.Add(_reviewHost);
-        _titleBar = CreateTitleBar(); ConfigureRibbon();
+        _titleBar = CreateTitleBar(); ConfigureRibbon(); InitializeDocumentNavigation();
         _noticeText.TextWrapping = TextWrapping.Wrap; var dismiss = new RibbonButton("close", "Dismiss notification", () => _notice.Visibility = Visibility.Collapsed);
         _notice.Child = OfficeTheme.Columns((_noticeText, -1), (dismiss, 26)); _notice.Background = OfficeTheme.Brush("#FFF4CE"); _notice.Padding = new(16, 5, 10, 5);
         var main = OfficeTheme.Rows((_titleBar, 42), (Ribbon, 0), (_notice, 0), (_workspace, -1), (CreateStatusBar(), 25));
@@ -99,6 +100,19 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
     private void OnSessionChanged(object? sender, EditorChangedEventArgs e)
     {
         if (_disposed) return;
+        if (Surface.IsProcessingNativeInput)
+        {
+            if (!_nativeUiRefreshPending)
+            {
+                _nativeUiRefreshPending = true;
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _nativeUiRefreshPending = false;
+                    if (!_disposed) OnSessionChanged(Session, new(EditorChangeKind.Document, "Typing"));
+                });
+            }
+            return;
+        }
         RefreshStatus(); RefreshFormatting();
         if (e.Kind == EditorChangeKind.Document)
         {

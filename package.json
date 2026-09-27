@@ -1,1 +1,8 @@
-{"name":"textspace-acceptance","private":true,"type":"module","scripts":{"test:browser":"node scripts/browser-check.mjs"},"devDependencies":{"@playwright/test":"1.63.0"},"engines":{"node":">=22"}}
+{
+  "name": "textspace-acceptance",
+  "private": true,
+  "type": "module",
+  "scripts": { "test:browser": "node scripts/run-browser-checks.mjs" },
+  "devDependencies": { "@playwright/test": "1.63.0" },
+  "engines": { "node": ">=22" }
+}

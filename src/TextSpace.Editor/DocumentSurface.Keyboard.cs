@@ -7,14 +7,39 @@ public sealed partial class DocumentSurface
     private bool _ownsNativeInput;
     private int _inputDispatch;
 
+    private static bool IsDocumentKey(VirtualKey key, bool control) => control
+        ? key is VirtualKey.B or VirtualKey.I or VirtualKey.U or VirtualKey.Z or VirtualKey.Y
+            or VirtualKey.A or VirtualKey.S or VirtualKey.O or VirtualKey.N or VirtualKey.P
+            or VirtualKey.F or VirtualKey.H or VirtualKey.K or VirtualKey.E or VirtualKey.L
+            or VirtualKey.R or VirtualKey.J or VirtualKey.Enter or VirtualKey.Home or VirtualKey.End
+            or VirtualKey.Left or VirtualKey.Right or VirtualKey.Back or VirtualKey.Delete
+        : key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right
+            or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown
+            or VirtualKey.Back or VirtualKey.Delete or VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Escape;
+
+    private void FinishInputCommand()
+    {
+        if (!_ownsNativeInput) return;
+        _ownsNativeInput = false;
+        SyncInput();
+    }
+
+    // Key-up follows all synchronous native post-key handlers. Restoring here
+    // makes the input ready for a following IME/beforeinput event even when the
+    // dispatcher has not yet run the deferred restoration.
+    private void OnInputKeyUp(object sender, KeyRoutedEventArgs e) => FinishInputCommand();
+
     private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
         var dispatch = ++_inputDispatch;
-        // A new event starts from the authoritative document and selection, even
-        // when the platform dispatched it before the previous queued restoration.
-        _ownsNativeInput = false;
-        SyncInput();
-        var control = ControlDown(); var shift = KeyDown(VirtualKey.Shift); var position = Session.Selection.Active; var index = Session.Index;
+        // Never overwrite pending native character input with an older model
+        // snapshot: TextChanged is asynchronous. Only restore a buffer previously
+        // owned by a document command, and commit pending text before a new command.
+        if (_ownsNativeInput) FinishInputCommand();
+        var control = ControlDown();
+        if (!IsDocumentKey(e.Key, control)) return;
+        CommitNativeInput();
+        var shift = KeyDown(VirtualKey.Shift); var position = Session.Selection.Active; var index = Session.Index;
         void Move(int target) { Session.SetSelection(shift ? Session.Selection.Anchor : target, target); SyncInput(); _caretVisible = true; }
         try
         {
@@ -87,8 +112,7 @@ public sealed partial class DocumentSurface
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     if (_disposed || dispatch != _inputDispatch) return;
-                    _ownsNativeInput = false;
-                    SyncInput();
+                    FinishInputCommand();
                 });
             }
         }

@@ -29,11 +29,12 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private double? _desiredX;
     private string _documentId;
     private Point _lastPointer;
+    public bool IsProcessingNativeInput => _nativeEdit;
     public EditorSession Session { get; }
     public DocumentRenderer Renderer { get; } = new();
     public DocumentLayout Layout { get; private set; }
     public double Zoom => _zoom;
-    public double Scale => _zoom * 4d / 3;
+    public new double Scale => _zoom * 4d / 3;
     public double ScrollY => _scrollY;
     public double ScrollX => _scrollX;
     public double PaperLeft => Math.Max(34, (_canvas.ActualWidth - Layout.Width * Scale) / 2) - _scrollX;
@@ -48,18 +49,18 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     public event Action<string>? CommandRequested;
     public event Action<string>? Error;
     public event Action? ViewChanged;
-    public event Action<Point>? ContextRequested;
+    public new event Action<Point>? ContextRequested;
 
     public DocumentSurface(EditorSession session)
     {
         Session = session; _documentId = session.Document.Id; Layout = Renderer.Layout(session.Document);
         _input = OfficeTheme.Field("Document text"); _input.AcceptsReturn = true; _input.TextWrapping = TextWrapping.NoWrap; _input.Width = 2; _input.Height = 24; _input.MinHeight = 0; _input.Padding = new(0); _input.BorderThickness = new(0); _input.Opacity = 0.01; _input.HorizontalAlignment = HorizontalAlignment.Left; _input.VerticalAlignment = VerticalAlignment.Top; _input.IsSpellCheckEnabled = false;
-        _input.TextChanged += OnNativeTextChanged; _input.SelectionChanged += OnNativeSelectionChanged; _input.PreviewKeyDown += OnInputKeyDown;
+        // Capture the model synchronously, but never mutate the visual/input tree
+        // until TextBox has finished its own text and selection update.
+        _input.TextChanging += (_, _) => CommitNativeInput();
+        _input.TextChanged += OnNativeTextChanged; _input.SelectionChanged += OnNativeSelectionChanged; _input.PreviewKeyDown += OnInputKeyDown; _input.PreviewKeyUp += OnInputKeyUp;
         _input.BeforeTextChanging += (_, e) =>
         {
-            // Uno's post-key TextBox handler may still run for a handled routed key.
-            // Session commands already applied that edit; cancel only the redundant
-            // native-buffer proposal, never a programmatic session synchronization.
             if (_ownsNativeInput && !_syncing) e.Cancel = true;
         };
         _input.GotFocus += (_, _) => { _caretVisible = true; _caretTimer.Start(); Invalidate(); }; _input.LostFocus += (_, _) => { _caretVisible = false; _caretTimer.Stop(); Invalidate(); };
@@ -89,7 +90,16 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     public new static bool KeyDown(VirtualKey key) => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
     public static bool ControlDown() => KeyDown(VirtualKey.Control) || KeyDown(VirtualKey.LeftWindows) || KeyDown(VirtualKey.RightWindows);
-    public void FocusEditor() { _input.IsReadOnly = Session.IsReadOnly; SyncInput(); _input.Focus(FocusState.Programmatic); _caretVisible = true; Invalidate(); }
+    public void FocusEditor()
+    {
+        if (_disposed || DeferFocusUntilPopupsClose()) return;
+        if (_input.FocusState != FocusState.Unfocused) CommitNativeInput();
+        _input.IsReadOnly = Session.IsReadOnly;
+        SyncInput();
+        _input.Focus(FocusState.Programmatic);
+        _caretVisible = true;
+        Invalidate();
+    }
     public void Invalidate() => _canvas.Invalidate();
     public void Relayout()
     {
@@ -98,6 +108,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void OnSessionChanged(object? sender, EditorChangedEventArgs e)
     {
         if (_disposed) return;
+        if (_nativeEdit) { QueueNativeViewRefresh(); return; }
         if (e.Kind == EditorChangeKind.Document)
         {
             if (_documentId != Session.Document.Id || e.Label == "Open document") { _documentId = Session.Document.Id; Renderer.ClearImages(); _scrollX = _scrollY = 0; SelectedImageId = null; }
@@ -113,12 +124,14 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         try
         {
             var text = Session.Document.PlainText; if (_input.Text != text) _input.Text = text;
-            var selection = Session.Selection; if (_input.SelectionStart != selection.Start || _input.SelectionLength != selection.Length) _input.Select(selection.Start, selection.Length);
+            var selection = Session.Selection;
+            _input.Select(selection.Start, selection.Length);
             _input.IsReadOnly = Session.IsReadOnly; UpdateInputPosition();
         }
         finally { _syncing = false; }
     }
-    private void OnNativeTextChanged(object sender, TextChangedEventArgs e)
+    private void OnNativeTextChanged(object sender, TextChangedEventArgs e) => CommitNativeInput();
+    private void CommitNativeInput()
     {
         if (_syncing || _nativeEdit || _ownsNativeInput) return;
         var oldText = Session.Document.PlainText; var newText = _input.Text.Replace("\r\n", "\n").Replace('\r', '\n'); if (oldText == newText) return;
@@ -127,7 +140,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         _nativeEdit = true;
         try { Session.Replace(prefix, oldText.Length - prefix - suffix, newText.Substring(prefix, newText.Length - prefix - suffix)); }
         catch (Exception ex) { Error?.Invoke(ex.Message); }
-        finally { _nativeEdit = false; if (_input.Text != Session.Document.PlainText) SyncInput(); }
+        finally { _nativeEdit = false; if (_input.Text != Session.Document.PlainText) QueueNativeViewRefresh(); }
     }
     private void OnNativeSelectionChanged(object sender, RoutedEventArgs e)
     {
@@ -202,8 +215,8 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         _input.RenderTransform = new TranslateTransform { X = x, Y = y };
     }
     private void Try(Action action) { try { action(); } catch (Exception ex) { Error?.Invoke(ex.Message); SyncInput(); } }
-    public void Dispose()
+    public new void Dispose()
     {
-        if (_disposed) return; _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _input.PreviewKeyDown -= OnInputKeyDown; _canvas.Draw = null; Renderer.Dispose();
+        if (_disposed) return; _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _input.PreviewKeyDown -= OnInputKeyDown; _input.PreviewKeyUp -= OnInputKeyUp; _canvas.Draw = null; Renderer.Dispose();
     }
 }

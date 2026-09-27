@@ -25,6 +25,11 @@ public sealed partial class DocxWriter
         var result = E("p", ParagraphProperties(paragraph.Format)); var start = _index.StartOf(paragraph); var position = 0;
         void Mark(int offset)
         {
+            foreach (var (bookmark, id) in _document.Bookmarks.Select((b, i) => (b, i)))
+            {
+                if (bookmark.Start == start + offset) result.Add(E("bookmarkStart", new XAttribute(W + "id", id), new XAttribute(W + "name", bookmark.Name)));
+                if (bookmark.End == start + offset) result.Add(E("bookmarkEnd", new XAttribute(W + "id", id)));
+            }
             foreach (var (comment, id) in _document.Comments.Select((c, i) => (c, i)))
             {
                 if (comment.Start == start + offset) result.Add(E("commentRangeStart", new XAttribute(W + "id", id)));
@@ -34,7 +39,9 @@ public sealed partial class DocxWriter
         Mark(0);
         foreach (var run in paragraph.Runs)
         {
-            var boundaries = _document.Comments.SelectMany(c => new[] { c.Start - start, c.End - start }).Where(i => i > position && i < position + run.Text.Length).Append(position + run.Text.Length).Distinct().Order().ToArray(); var at = position;
+            var boundaries = _document.Comments.SelectMany(c => new[] { c.Start - start, c.End - start })
+                .Concat(_document.Bookmarks.SelectMany(b => new[] { b.Start - start, b.End - start }))
+                .Where(i => i > position && i < position + run.Text.Length).Append(position + run.Text.Length).Distinct().Order().ToArray(); var at = position;
             foreach (var end in boundaries)
             {
                 var content = Run(run.Text.Substring(at - position, end - at), run.Style); var link = SafeLink(run.Style.Hyperlink);
