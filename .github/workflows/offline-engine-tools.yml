@@ -1,0 +1,35 @@
+name: Offline engine tools
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/editor-parity]
+    paths: ['.github/workflows/offline-engine-tools.yml']
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore tests/TextSpace.Tests
+      - name: Bundle only the public SDK and public NuGet dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/packages
+          SDK=$(dotnet --version)
+          RUNTIME=$(dotnet --list-runtimes | awk '$1 == "Microsoft.NETCore.App" && $2 ~ /^10\./ {print $2}' | sort -V | tail -1)
+          ROOT=$(dirname "$(readlink -f "$(command -v dotnet)")")
+          tar -czf artifacts/dotnet.tar.gz -C "$ROOT" dotnet LICENSE.txt ThirdPartyNotices.txt "sdk/$SDK" "host/fxr/$RUNTIME" "shared/Microsoft.NETCore.App/$RUNTIME" packs/Microsoft.NETCore.App.Ref packs/Microsoft.NETCore.App.Host.linux-x64
+          find "$HOME/.nuget/packages" -type f -name '*.nupkg' -exec cp '{}' artifacts/packages/ \;
+          printf 'SDK=%s\nRuntime=%s\n' "$SDK" "$RUNTIME" > artifacts/toolchain.txt
+          (cd artifacts && sha256sum dotnet.tar.gz > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-offline-engine-tools
+          path: artifacts
+          retention-days: 2
