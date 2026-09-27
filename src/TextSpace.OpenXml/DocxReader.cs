@@ -20,6 +20,8 @@ public sealed partial class DocxReader
     private readonly Dictionary<string, ListKind> _numbering = [];
     private readonly List<string> _warnings = [];
     private readonly Dictionary<string, int> _commentStarts = [], _commentEnds = [];
+    private readonly Dictionary<string, (string Name, int Start)> _bookmarkStarts = [];
+    private readonly Dictionary<string, int> _bookmarkEnds = [];
     private TextStyle _defaultStyle = new();
     private int _textPosition;
     private void Warn(string text) { if (!_warnings.Contains(text)) _warnings.Add(text); }
@@ -28,7 +30,7 @@ public sealed partial class DocxReader
         if (bytes.Length > DocumentJson.MaxFileBytes) throw new InvalidDataException("DOCX files must be smaller than 32 MB.");
         using var input = new MemoryStream(bytes, false); using var zip = new ZipArchive(input, ZipArchiveMode.Read); _zip = zip;
         if (zip.Entries.Count > 10_000 || zip.Entries.Sum(e => e.Length) > 64L * 1024 * 1024 || zip.Entries.Any(e => e.Length > 32L * 1024 * 1024)) throw new InvalidDataException("The expanded DOCX exceeds the package safety limits.");
-        _warnings.Clear(); _styles.Clear(); _numbering.Clear(); _commentStarts.Clear(); _commentEnds.Clear(); _defaultStyle = new(); _textPosition = 0;
+        _warnings.Clear(); _styles.Clear(); _numbering.Clear(); _commentStarts.Clear(); _commentEnds.Clear(); _bookmarkStarts.Clear(); _bookmarkEnds.Clear(); _defaultStyle = new(); _textPosition = 0;
         var rootRelationships = Xml("_rels/.rels");
         _main = rootRelationships?.Root?.Elements(Rel + "Relationship").Where(e => ((string?)e.Attribute("Type"))?.EndsWith("/officeDocument", StringComparison.Ordinal) == true && (string?)e.Attribute("TargetMode") != "External").Select(e => Resolve("", (string?)e.Attribute("Target") ?? "")).FirstOrDefault() ?? "word/document.xml";
         var xml = Xml(_main) ?? throw new InvalidDataException("The package does not contain a Word document.");
@@ -44,7 +46,7 @@ public sealed partial class DocxReader
         document.Header = ReadHeaderFooter(section?.Elements(W + "headerReference").FirstOrDefault()); document.Footer = ReadHeaderFooter(section?.Elements(W + "footerReference").FirstOrDefault());
         var core = Xml("docProps/core.xml"); XNamespace dc = "http://purl.org/dc/elements/1.1/";
         document.Title = core?.Root?.Element(dc + "title")?.Value ?? "Imported document"; document.Author = core?.Root?.Element(dc + "creator")?.Value ?? "You";
-        LoadComments(document);
+        LoadComments(document); LoadBookmarks(document);
         if (xml.Descendants(W + "ins").Any() || xml.Descendants(W + "del").Any()) Warn("Word tracked changes were imported as their current visible text; revision history is not preserved.");
         if (xml.Descendants(W + "footnoteReference").Any() || xml.Descendants(W + "endnoteReference").Any()) Warn("Footnotes and endnotes are not imported in this version.");
         if (xml.Descendants(W + "altChunk").Any() || xml.Descendants(W + "object").Any()) Warn("Embedded objects and alternative-format content are not imported or executed.");
@@ -106,7 +108,19 @@ public sealed partial class DocxReader
             foreach (var child in node.Elements())
             {
                 if (child.Name == W + "del" || child.Name == W + "pPr") continue;
-                if (child.Name == W + "commentRangeStart") { var id = (string?)child.Attribute(W + "id"); if (id is not null) _commentStarts[id] = _textPosition + paragraph.Length; }
+                if (child.Name == W + "bookmarkStart")
+                {
+                    var id = (string?)child.Attribute(W + "id"); var name = (string?)child.Attribute(W + "name");
+                    if (id is not null && name is not null)
+                    {
+                        if (!_bookmarkStarts.TryAdd(id, (name, _textPosition + paragraph.Length))) Warn("A duplicate bookmark identifier was omitted.");
+                    }
+                }
+                else if (child.Name == W + "bookmarkEnd")
+                {
+                    var id = (string?)child.Attribute(W + "id"); if (id is not null) _bookmarkEnds.TryAdd(id, _textPosition + paragraph.Length);
+                }
+                else if (child.Name == W + "commentRangeStart") { var id = (string?)child.Attribute(W + "id"); if (id is not null) _commentStarts[id] = _textPosition + paragraph.Length; }
                 else if (child.Name == W + "commentRangeEnd") { var id = (string?)child.Attribute(W + "id"); if (id is not null) _commentEnds[id] = _textPosition + paragraph.Length; }
                 else if (child.Name == W + "r")
                 {

@@ -54,12 +54,14 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     {
         Session = session; _documentId = session.Document.Id; Layout = Renderer.Layout(session.Document);
         _input = OfficeTheme.Field("Document text"); _input.AcceptsReturn = true; _input.TextWrapping = TextWrapping.NoWrap; _input.Width = 2; _input.Height = 24; _input.MinHeight = 0; _input.Padding = new(0); _input.BorderThickness = new(0); _input.Opacity = 0.01; _input.HorizontalAlignment = HorizontalAlignment.Left; _input.VerticalAlignment = VerticalAlignment.Top; _input.IsSpellCheckEnabled = false;
-        _input.TextChanged += OnNativeTextChanged;
-        _input.SelectionChanged += OnNativeSelectionChanged;
-        // Document commands must run during tunneling, before TextBox performs its
-        // own Enter/Delete/navigation/undo operation. A bubbling KeyDown handler
-        // runs too late on Skia and can apply the same keystroke twice.
-        _input.PreviewKeyDown += OnInputKeyDown;
+        _input.TextChanged += OnNativeTextChanged; _input.SelectionChanged += OnNativeSelectionChanged; _input.PreviewKeyDown += OnInputKeyDown;
+        _input.BeforeTextChanging += (_, e) =>
+        {
+            // Uno's post-key TextBox handler may still run for a handled routed key.
+            // Session commands already applied that edit; cancel only the redundant
+            // native-buffer proposal, never a programmatic session synchronization.
+            if (_ownsNativeInput && !_syncing) e.Cancel = true;
+        };
         _input.GotFocus += (_, _) => { _caretVisible = true; _caretTimer.Start(); Invalidate(); }; _input.LostFocus += (_, _) => { _caretVisible = false; _caretTimer.Stop(); Invalidate(); };
         _viewport.Children.Add(_canvas); _viewport.Children.Add(_input);
         var paper = OfficeTheme.Columns((_viewport, -1), (_vertical, 16));
@@ -118,7 +120,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     private void OnNativeTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_syncing || _nativeEdit) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput) return;
         var oldText = Session.Document.PlainText; var newText = _input.Text.Replace("\r\n", "\n").Replace('\r', '\n'); if (oldText == newText) return;
         var prefix = 0; while (prefix < oldText.Length && prefix < newText.Length && oldText[prefix] == newText[prefix]) prefix++;
         var suffix = 0; while (suffix < oldText.Length - prefix && suffix < newText.Length - prefix && oldText[oldText.Length - 1 - suffix] == newText[newText.Length - 1 - suffix]) suffix++;
@@ -129,7 +131,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     private void OnNativeSelectionChanged(object sender, RoutedEventArgs e)
     {
-        if (_syncing || _nativeEdit || _input.Text != Session.Document.PlainText) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput || _input.Text != Session.Document.PlainText) return;
         var start = _input.SelectionStart; var end = start + _input.SelectionLength;
         if (Session.Selection.Start == start && Session.Selection.End == end) return;
         Session.SetSelection(start, end);

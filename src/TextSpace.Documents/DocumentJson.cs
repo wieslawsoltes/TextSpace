@@ -19,7 +19,7 @@ public static class DocumentJson
     public static void Validate(DocumentModel document)
     {
         if (document.FormatVersion != 1) throw new InvalidDataException("Unsupported TextSpace document version.");
-        if (document.Blocks is null || document.Comments is null || document.Changes is null || document.Page is null) throw new InvalidDataException("Missing document structure.");
+        if (document.Blocks is null || document.Comments is null || document.Changes is null || document.Bookmarks is null || document.Page is null) throw new InvalidDataException("Missing document structure.");
         var page = document.Page;
         if (!double.IsFinite(page.Width + page.Height + page.MarginTop + page.MarginBottom + page.MarginLeft + page.MarginRight + page.ColumnGap) || page.Width is < 144 or > 4000 || page.Height is < 144 or > 4000 || page.MarginLeft < 0 || page.MarginRight < 0 || page.MarginTop < 0 || page.MarginBottom < 0 || page.ContentHeight < 36 || page.ContentWidth < 36 || page.Columns is < 1 or > 3 || page.ColumnWidth < 24) throw new InvalidDataException("Invalid page geometry.");
         var count = 0; var chars = 0; long images = 0; var ids = new HashSet<string>();
@@ -60,6 +60,20 @@ public static class DocumentJson
         }
         Walk(document.Blocks, 0);
         if (!document.Paragraphs().Any()) document.Blocks.Add(new Paragraph());
+        if (document.Bookmarks.Count == 0) return;
+        var index = new TextIndex(document);
+        if (document.Bookmarks.Count > 10_000) throw new InvalidDataException("Too many bookmarks.");
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var bookmarkIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var bookmark in document.Bookmarks)
+        {
+            if (bookmark is null || !Bookmark.IsValidName(bookmark.Name) || !names.Add(bookmark.Name)
+                || string.IsNullOrWhiteSpace(bookmark.Id) || !bookmarkIds.Add(bookmark.Id))
+                throw new InvalidDataException("Bookmarks require unique names and identifiers.");
+            if (bookmark.Start < 0 || bookmark.End < bookmark.Start || bookmark.End > index.Length
+                || index.Snap(bookmark.Start) != bookmark.Start || index.Snap(bookmark.End) != bookmark.End)
+                throw new InvalidDataException("A bookmark lies outside the document or splits a Unicode grapheme.");
+        }
     }
     public static DocumentModel FromText(string text, string title = "Document1")
     {

@@ -66,7 +66,6 @@ public sealed partial class EditorSession
         var index = Index;
         if (anchor == active)
         {
-            // Never expand a collapsed pointer position into a selected grapheme.
             var position = index.Snap(active); Selection = new(position, position);
         }
         else if (anchor < active) Selection = new(index.Snap(anchor), index.Snap(active, true));
@@ -114,7 +113,6 @@ public sealed partial class EditorSession
         }
         finally { _transaction = false; }
         var pending = _pendingNotification; _pendingNotification = null;
-        // Only fully committed or fully restored state is observable by the UI.
         if (failure is not null)
         {
             try { Notify(EditorChangeKind.Document, "Rollback " + label); }
@@ -181,6 +179,13 @@ public sealed partial class EditorSession
         var end = start + removed; var delta = inserted - removed;
         int Map(int position, bool right) => position < start ? position : position > end ? position + delta : start + (right ? inserted : 0);
         foreach (var comment in Document.Comments) { comment.Start = Map(comment.Start, false); comment.End = Math.Max(comment.Start, Map(comment.End, true)); }
+        var index = Document.Bookmarks.Count > 0 ? Index : null;
+        foreach (var bookmark in Document.Bookmarks)
+        {
+            var point = bookmark.Start == bookmark.End;
+            bookmark.Start = index!.Snap(Map(bookmark.Start, point), point);
+            bookmark.End = point ? bookmark.Start : index.Snap(Math.Max(bookmark.Start, Map(bookmark.End, true)), true);
+        }
         foreach (var change in Document.Changes)
         {
             var changeEnd = change.Start + change.Inserted.Length;

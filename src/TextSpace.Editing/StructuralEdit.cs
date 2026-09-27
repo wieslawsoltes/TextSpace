@@ -18,6 +18,7 @@ public sealed partial class EditorSession
             var oldIndex = Index;
             var addresses = oldIndex.Paragraphs.Select(a => new AddressSnapshot(a.Paragraph.Id, a.Start, a.End)).ToArray();
             var selection = Selection;
+            var bookmarks = Document.Bookmarks.Select(b => (Bookmark: b, Start: b.Start, End: b.End)).ToArray();
             var comments = Document.Comments.Select(c => (Comment: c, Start: c.Start, End: c.End)).ToArray();
             var changes = Document.Changes.Select(c => (Change: c, Start: c.Start, End: c.Start + c.Inserted.Length)).ToArray();
             mutation();
@@ -42,6 +43,11 @@ public sealed partial class EditorSession
             {
                 anchor.Comment.Start = Map(anchor.Start);
                 anchor.Comment.End = Math.Max(anchor.Comment.Start, Map(anchor.End));
+            }
+            foreach (var anchor in bookmarks)
+            {
+                anchor.Bookmark.Start = Map(anchor.Start);
+                anchor.Bookmark.End = Math.Max(anchor.Bookmark.Start, Map(anchor.End));
             }
             foreach (var anchor in changes)
             {

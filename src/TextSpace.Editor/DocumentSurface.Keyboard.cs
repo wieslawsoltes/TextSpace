@@ -4,8 +4,16 @@ namespace TextSpace.Editor;
 
 public sealed partial class DocumentSurface
 {
+    private bool _ownsNativeInput;
+    private int _inputDispatch;
+
     private void OnInputKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        var dispatch = ++_inputDispatch;
+        // A new event starts from the authoritative document and selection, even
+        // when the platform dispatched it before the previous queued restoration.
+        _ownsNativeInput = false;
+        SyncInput();
         var control = ControlDown(); var shift = KeyDown(VirtualKey.Shift); var position = Session.Selection.Active; var index = Session.Index;
         void Move(int target) { Session.SetSelection(shift ? Session.Selection.Anchor : target, target); SyncInput(); _caretVisible = true; }
         try
@@ -68,5 +76,21 @@ public sealed partial class DocumentSurface
             e.Handled = true;
         }
         catch (Exception ex) { Error?.Invoke(ex.Message); e.Handled = true; SyncInput(); }
+        finally
+        {
+            _ownsNativeInput = e.Handled;
+            if (_ownsNativeInput)
+            {
+                // Post-key processing is synchronous but occurs after routed
+                // handlers. Prevent its text/selection notifications from becoming
+                // a second document edit, then restore the native input buffer.
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed || dispatch != _inputDispatch) return;
+                    _ownsNativeInput = false;
+                    SyncInput();
+                });
+            }
+        }
     }
 }

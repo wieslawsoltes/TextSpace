@@ -18,6 +18,7 @@ public sealed class DocumentModel
     public List<Block> Blocks { get; set; } = [new Paragraph()];
     public List<CommentThread> Comments { get; set; } = [];
     public List<TrackedEdit> Changes { get; set; } = [];
+    public List<Bookmark> Bookmarks { get; set; } = [];
     [JsonIgnore] public string PlainText => new TextIndex(this).Text;
     [JsonIgnore] public int WordCount => Regex.Matches(PlainText, @"[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*").Count;
     public IEnumerable<Paragraph> Paragraphs() => Walk(Blocks);
