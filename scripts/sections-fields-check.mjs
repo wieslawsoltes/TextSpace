@@ -19,11 +19,11 @@ async function until(condition, message, timeout = 30000) {
 async function find(name) {
   return page.evaluate(name => globalThis.__textSpaceState?.controls.findLast(c => (c.name === name || c.command === name) && c.enabled && c.width > 0 && c.height > 0), name);
 }
-async function click(name) {
+async function click(name, minimumWidth = 0) {
   let c;
   await until(async () => {
     c = await find(name);
-    return c && c.x + c.width / 2 >= 0 && c.x + c.width / 2 < 1440 && c.y + c.height / 2 >= 0 && c.y + c.height / 2 < 1000;
+    return c && c.width >= minimumWidth && c.x + c.width / 2 >= 0 && c.x + c.width / 2 < 1440 && c.y + c.height / 2 >= 0 && c.y + c.height / 2 < 1000;
   }, 'Control not visible: ' + name);
   await page.mouse.click(c.x + c.width / 2, c.y + c.height / 2); await page.waitForTimeout(250);
 }
@@ -43,7 +43,7 @@ async function blank() {
   await until(async () => (await state()).text === '', 'New blank document failed'); await readyInput('');
 }
 async function rename(title) {
-  await click('File tab'); await click('File Info'); await click('Rename document');
+  await click('File tab'); await click('File Info'); await click('Rename document', 300);
   await fill('Document name', title); await click('Rename'); await click('Back to document');
   await until(async () => (await state()).title === title, 'Rename failed'); await readyInput((await state()).text);
 }
