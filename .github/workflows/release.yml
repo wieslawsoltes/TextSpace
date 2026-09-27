@@ -9,6 +9,10 @@ on:
         type: string
         required: true
         default: 0.1.0-alpha.1
+      publish_nuget:
+        description: Publish validated packages with the nuget environment's NUGET_API_KEY
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -79,7 +83,7 @@ jobs:
           from pathlib import Path
           root=Path('artifacts/release')
           shutil.make_archive(str(root/f'TextSpace-{os.environ["VERSION"]}-browser'),'zip','artifacts/site')
-          info={'version':os.environ['VERSION'],'sourceCommit':os.environ['SOURCE_SHA'],'validatedBuildRun':os.environ['SOURCE_RUN'],'browserBasePath':'/TextSpace/','nugetPublished':False}
+          info={'version':os.environ['VERSION'],'sourceCommit':os.environ['SOURCE_SHA'],'validatedBuildRun':os.environ['SOURCE_RUN'],'browserBasePath':'/TextSpace/','nugetPublication':'separate opt-in job'}
           (root/'release-info.json').write_text(json.dumps(info,indent=2)+'\n')
           (root/'SHA256SUMS.txt').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name for p in sorted(root.iterdir()) if p.is_file())+'\n')
           PY
@@ -88,11 +92,6 @@ jobs:
           name: TextSpace-release-${{ steps.source.outputs.version }}
           path: artifacts/release
           if-no-files-found: error
-      - name: Publish tagged GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: echo 'Validated release assets are attached to this run. The publish job creates the GitHub release.'
     outputs:
       version: ${{ steps.source.outputs.version }}
   publish:
@@ -106,7 +105,7 @@ jobs:
         with:
           name: TextSpace-release-${{ needs.package.outputs.version }}
           path: release
-      - name: Publish validated release
+      - name: Publish validated GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -117,3 +116,25 @@ jobs:
           FLAGS=()
           if [[ "$VERSION" == *-* ]]; then FLAGS+=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "TextSpace $VERSION" --generate-notes "${FLAGS[@]}"
+  nuget:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_nuget
+    needs: package
+    runs-on: ubuntu-latest
+    environment: nuget
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-release-${{ needs.package.outputs.version }}
+          path: release
+      - name: Publish explicitly requested packages
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$NUGET_API_KEY" || { echo 'Configure NUGET_API_KEY in the nuget environment before requesting publication.'; exit 1; }
+          (cd release && sha256sum --check SHA256SUMS.txt)
+          dotnet nuget push 'release/*.nupkg' --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate

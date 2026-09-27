@@ -29,6 +29,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private double? _desiredX;
     private string _documentId;
     private Point _lastPointer;
+    public bool IsProcessingNativeInput => _nativeEdit;
     public EditorSession Session { get; }
     public DocumentRenderer Renderer { get; } = new();
     public DocumentLayout Layout { get; private set; }
@@ -54,15 +55,12 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     {
         Session = session; _documentId = session.Document.Id; Layout = Renderer.Layout(session.Document);
         _input = OfficeTheme.Field("Document text"); _input.AcceptsReturn = true; _input.TextWrapping = TextWrapping.NoWrap; _input.Width = 2; _input.Height = 24; _input.MinHeight = 0; _input.Padding = new(0); _input.BorderThickness = new(0); _input.Opacity = 0.01; _input.HorizontalAlignment = HorizontalAlignment.Left; _input.VerticalAlignment = VerticalAlignment.Top; _input.IsSpellCheckEnabled = false;
-        // TextChanging is synchronous; waiting for TextChanged can let a later
-        // focus/selection synchronization overwrite characters still in the buffer.
+        // Capture the model synchronously, but never mutate the visual/input tree
+        // until TextBox has finished its own text and selection update.
         _input.TextChanging += (_, _) => CommitNativeInput();
         _input.TextChanged += OnNativeTextChanged; _input.SelectionChanged += OnNativeSelectionChanged; _input.PreviewKeyDown += OnInputKeyDown; _input.PreviewKeyUp += OnInputKeyUp;
         _input.BeforeTextChanging += (_, e) =>
         {
-            // Uno's post-key TextBox handler may still run for a handled routed key.
-            // Session commands already applied that edit; cancel only the redundant
-            // native-buffer proposal, never a programmatic session synchronization.
             if (_ownsNativeInput && !_syncing) e.Cancel = true;
         };
         _input.GotFocus += (_, _) => { _caretVisible = true; _caretTimer.Start(); Invalidate(); }; _input.LostFocus += (_, _) => { _caretVisible = false; _caretTimer.Stop(); Invalidate(); };
@@ -110,6 +108,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void OnSessionChanged(object? sender, EditorChangedEventArgs e)
     {
         if (_disposed) return;
+        if (_nativeEdit) { QueueNativeViewRefresh(); return; }
         if (e.Kind == EditorChangeKind.Document)
         {
             if (_documentId != Session.Document.Id || e.Label == "Open document") { _documentId = Session.Document.Id; Renderer.ClearImages(); _scrollX = _scrollY = 0; SelectedImageId = null; }
@@ -126,15 +125,12 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         {
             var text = Session.Document.PlainText; if (_input.Text != text) _input.Text = text;
             var selection = Session.Selection;
-            // Select also refreshes the native selection bridge after a rejected
-            // platform edit, even when its managed dependency values match.
             _input.Select(selection.Start, selection.Length);
             _input.IsReadOnly = Session.IsReadOnly; UpdateInputPosition();
         }
         finally { _syncing = false; }
     }
     private void OnNativeTextChanged(object sender, TextChangedEventArgs e) => CommitNativeInput();
-
     private void CommitNativeInput()
     {
         if (_syncing || _nativeEdit || _ownsNativeInput) return;
@@ -144,7 +140,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         _nativeEdit = true;
         try { Session.Replace(prefix, oldText.Length - prefix - suffix, newText.Substring(prefix, newText.Length - prefix - suffix)); }
         catch (Exception ex) { Error?.Invoke(ex.Message); }
-        finally { _nativeEdit = false; if (_input.Text != Session.Document.PlainText) SyncInput(); }
+        finally { _nativeEdit = false; if (_input.Text != Session.Document.PlainText) QueueNativeViewRefresh(); }
     }
     private void OnNativeSelectionChanged(object sender, RoutedEventArgs e)
     {
