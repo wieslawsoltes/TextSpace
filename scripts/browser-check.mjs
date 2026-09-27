@@ -15,7 +15,7 @@ page.on('console', message => { if (message.type() === 'error' || message.type()
 const state = () => page.evaluate(() => globalThis.__textSpaceState);
 async function until(test, message, timeout = 30000) {
   const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) { if (await test()) return; await page.waitForTimeout(150); }
+  while (Date.now() < deadline) { if (await test()) return; await page.waitForTimeout(100); }
   throw new Error(message);
 }
 async function click(name) {
@@ -26,6 +26,19 @@ async function click(name) {
   }, 'Missing control: ' + name);
   await page.mouse.click(control.x + control.width / 2, control.y + control.height / 2);
   await page.waitForTimeout(250);
+}
+// Managed model notifications can precede the native DOM input's focus/layout.
+// Observe that boundary, never focus an element or inject text through a test API.
+async function inputReady(expectedText, tag = 'TEXTAREA') {
+  await until(() => page.evaluate(({ expectedText, tag }) => {
+    const input = document.activeElement;
+    return input?.id === 'uno-input' && input.tagName === tag && !input.readOnly && !input.disabled && input.value === expectedText;
+  }, { expectedText, tag }), 'Native input did not acquire focus with the expected document text');
+}
+async function typeText(text) {
+  const expected = (await state()).text;
+  await inputReady(expected);
+  await page.keyboard.insertText(text);
 }
 async function boot() {
   await page.goto(base + '?test=1', { waitUntil: 'domcontentloaded' });
@@ -68,25 +81,38 @@ try {
   });
   await check('new document and typing', async () => {
     await click('File tab'); await click('Blank document template'); await until(async () => (await state()).text === '', 'Blank template did not load');
+    // Wait for template completion before calculating coordinates from its layout.
+    await inputReady('');
     const { canvas: c } = await state();
     await page.mouse.click(c.x + c.paperLeft + 75 * c.scale, c.y + 18 + 75 * c.scale - c.scrollY);
-    await page.keyboard.insertText('Hello TextSpace'); await until(async () => (await state()).text === 'Hello TextSpace', 'Typing failed');
+    await typeText('Hello TextSpace'); await until(async () => (await state()).text === 'Hello TextSpace', 'Typing failed');
   });
   await check('formatting and history', async () => {
+    await inputReady('Hello TextSpace');
     await page.keyboard.press('Control+a'); await page.keyboard.press('Control+b'); await until(async () => (await state()).style.bold, 'Bold failed');
-    await page.keyboard.press('Control+End'); await page.keyboard.press('Enter'); await page.keyboard.insertText('Second paragraph');
+    await page.keyboard.press('Control+End'); await page.keyboard.press('Enter');
+    await until(async () => (await state()).text === 'Hello TextSpace\n', 'Paragraph break failed');
+    await typeText('Second paragraph');
     await until(async () => (await state()).text.endsWith('Second paragraph'), 'Paragraph failed');
     await page.keyboard.press('Control+z'); await until(async () => !(await state()).text.includes('Second paragraph'), 'Undo failed');
     await page.keyboard.press('Control+y'); await until(async () => (await state()).text.endsWith('Second paragraph'), 'Redo failed');
   });
   await check('native download', async () => {
+    await inputReady((await state()).text);
     const pending = page.waitForEvent('download'); await page.keyboard.press('Control+s'); const download = await pending;
     await download.saveAs('test-results/document.textspace');
     const model = JSON.parse(await fs.readFile('test-results/document.textspace', 'utf8'));
     assert.equal(model.formatVersion, 1); assert.ok(model.blocks.length >= 2);
   });
   await check('recovery after reload', async () => {
-    const text = (await state()).text; await page.waitForTimeout(2000); await boot(); assert.equal((await state()).text, text);
+    const text = (await state()).text;
+    await until(() => page.evaluate(async expected => {
+      const value = await globalThis.TextSpaceHost.loadRecovery();
+      if (!value) return false;
+      const document = JSON.parse(value);
+      return document.blocks.map(p => (p.runs || []).map(r => r.text).join('')).join('\n') === expected;
+    }, text), 'Recovery transaction did not commit');
+    await boot(); assert.equal((await state()).text, text);
   });
   await check('DOCX export', async () => {
     await click('File tab'); await click('File Export'); const pending = page.waitForEvent('download'); await click('Word document');
@@ -100,6 +126,7 @@ try {
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); report.state = await state().catch(() => null);
+  report.nativeInput = await page.evaluate(() => ({ active: document.activeElement?.outerHTML, inputs: [...document.querySelectorAll('input,textarea')].map(e => ({ id: e.id, tag: e.tagName, value: e.value, start: e.selectionStart, end: e.selectionEnd })) })).catch(() => null);
   process.exitCode = 1; console.error(error);
   report.dom = await page.content().catch(() => '');
   await page.screenshot({ path: 'test-results/failure.png' }).catch(() => {});
