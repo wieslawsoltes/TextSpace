@@ -1,15 +1,17 @@
 namespace TextSpace.Controls;
 
-/// <summary>A fully templated, keyboard-accessible office button with checked and primary treatments.</summary>
+/// <summary>A templated, keyboard-accessible office button with bindable checked, primary and color treatments.</summary>
 public class OfficeButton : Button
 {
     private bool _hover;
     public static readonly DependencyProperty IsSelectedProperty = DependencyProperty.Register(nameof(IsSelected), typeof(bool), typeof(OfficeButton), new PropertyMetadata(false, OnAppearanceChanged));
     public static readonly DependencyProperty IsPrimaryProperty = DependencyProperty.Register(nameof(IsPrimary), typeof(bool), typeof(OfficeButton), new PropertyMetadata(false, OnAppearanceChanged));
+    public static readonly DependencyProperty RestBackgroundProperty = DependencyProperty.Register(nameof(RestBackground), typeof(string), typeof(OfficeButton), new PropertyMetadata("#00FFFFFF", OnAppearanceChanged));
+    public static readonly DependencyProperty ForegroundOverrideProperty = DependencyProperty.Register(nameof(ForegroundOverride), typeof(string), typeof(OfficeButton), new PropertyMetadata(null, OnAppearanceChanged));
     public bool IsSelected { get => (bool)GetValue(IsSelectedProperty); set => SetValue(IsSelectedProperty, value); }
     public bool IsPrimary { get => (bool)GetValue(IsPrimaryProperty); set => SetValue(IsPrimaryProperty, value); }
-    public string RestBackground { get; set; } = "#00FFFFFF";
-    public string? ForegroundOverride { get; set; }
+    public string RestBackground { get => (string)GetValue(RestBackgroundProperty); set => SetValue(RestBackgroundProperty, value); }
+    public string? ForegroundOverride { get => (string?)GetValue(ForegroundOverrideProperty); set => SetValue(ForegroundOverrideProperty, value); }
     private static void OnAppearanceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((OfficeButton)d).Refresh();
     public OfficeButton()
     {

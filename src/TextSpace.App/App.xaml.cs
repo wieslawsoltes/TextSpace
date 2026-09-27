@@ -2,7 +2,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using TextSpace.Controls;
-using TextSpace.Core;
 using TextSpace.Documents;
 using TextSpace.Editing;
 using TextSpace.Workbench;
@@ -30,12 +29,9 @@ public sealed partial class App : Application
 #else
             _host = new DesktopWorkspaceHost();
 #endif
-            DocumentModel document; string? warning = null;
-            try
-            {
-                var json = await _host.ReadLatestAsync(); document = string.IsNullOrWhiteSpace(json) ? SampleDocument.Create() : DocumentJson.Load(json);
-            }
-            catch (Exception ex) { document = SampleDocument.Create(); warning = "The previous local recovery could not be opened. It has not been intentionally deleted. " + ex.Message; }
+            // Failed recovery must not replace user data with a sample autosave.
+            var json = await _host.ReadLatestAsync();
+            var document = string.IsNullOrWhiteSpace(json) ? SampleDocument.Create() : DocumentJson.Load(json);
             var session = new EditorSession(document); _workbench = new(session, _host);
             await FontBootstrap.RegisterAsync(_workbench.Surface.Renderer.Metrics);
             _workbench.Surface.Relayout();
@@ -45,11 +41,6 @@ public sealed partial class App : Application
             BrowserDiagnostics.Attach(_workbench, _window);
             BrowserWorkspaceHost.Ready();
 #endif
-            if (warning is not null)
-            {
-                var banner = new TextBlock { Text = warning, TextWrapping = TextWrapping.Wrap, Foreground = OfficeTheme.Brush("#A4262C") };
-                Console.Error.WriteLine(warning);
-            }
             _window.Activate();
         }
         catch (Exception ex)

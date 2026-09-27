@@ -1,6 +1,6 @@
 namespace TextSpace.Controls;
 
-/// <summary>Reusable tabbed ribbon. Each tab creates its command groups on demand.</summary>
+/// <summary>Reusable tabbed ribbon with lazy command groups and host-extensible tab content.</summary>
 public sealed class RibbonBar : UserControl
 {
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, Spacing = 1, Margin = new(9, 0, 0, 0) };
@@ -29,6 +29,20 @@ public sealed class RibbonBar : UserControl
         button.DoubleTapped += (_, e) => { IsCollapsed = !IsCollapsed; e.Handled = true; };
         _tabs.Children.Add(button); _definitions[name] = (button, underline, factory);
         if (_selected.Length == 0) SelectTab(name);
+    }
+    /// <summary>Inserts a reusable group without replacing the existing tab factory.</summary>
+    public void InsertGroup(string tab, int index, Func<RibbonGroup> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        if (!_definitions.TryGetValue(tab, out var definition)) throw new ArgumentException("Unknown ribbon tab.", nameof(tab));
+        IEnumerable<RibbonGroup> Create()
+        {
+            var groups = definition.Factory().ToList();
+            groups.Insert(Math.Clamp(index, 0, groups.Count), factory());
+            return groups;
+        }
+        _definitions[tab] = (definition.Button, definition.Underline, Create);
+        if (_selected == tab) RefreshTab();
     }
     public void AddFileTab(Action open)
     {
