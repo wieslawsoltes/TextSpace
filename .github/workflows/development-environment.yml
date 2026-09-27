@@ -1,0 +1,43 @@
+name: Development environment
+on:
+  push:
+    branches: [feat/sections-fields]
+    paths: ['.github/workflows/development-environment.yml']
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore tests/TextSpace.Tests
+      - name: Package isolated SDK and restored engine dependencies
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-tools/dotnet"
+          D="$RUNNER_TEMP/offline-tools/dotnet"
+          cp /usr/share/dotnet/dotnet "$D/"
+          cp -a /usr/share/dotnet/host "$D/"
+          mkdir -p "$D/sdk" "$D/shared/Microsoft.NETCore.App" "$D/packs"
+          cp -a /usr/share/dotnet/sdk/10.0.401 "$D/sdk/"
+          R=$(ls /usr/share/dotnet/shared/Microsoft.NETCore.App | sort -V | tail -1)
+          cp -a "/usr/share/dotnet/shared/Microsoft.NETCore.App/$R" "$D/shared/Microsoft.NETCore.App/"
+          cp -a /usr/share/dotnet/packs/Microsoft.NETCore.App.Ref "$D/packs/"
+          tar -C "$RUNNER_TEMP/offline-tools" -czf "$RUNNER_TEMP/textspace-sdk.tar.gz" dotnet
+          tar -C "$HOME/.nuget" -czf "$RUNNER_TEMP/textspace-nuget.tar.gz" packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-offline-sdk
+          path: ${{ runner.temp }}/textspace-sdk.tar.gz
+          retention-days: 1
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-offline-dependencies
+          path: ${{ runner.temp }}/textspace-nuget.tar.gz
+          retention-days: 1
+          compression-level: 0
