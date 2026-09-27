@@ -1,0 +1,78 @@
+name: Pages
+on:
+  workflow_run:
+    workflows: [Build]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages-deployment
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Resolve validated build
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RUN" ]; then
+            RUN=$(gh api "repos/$REPO/actions/workflows/build.yml/runs?branch=main&status=success&per_page=20" --jq '[.workflow_runs[] | select(.event != "pull_request")][0].id')
+          fi
+          [[ "$RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$REPO/actions/runs/$RUN" > /tmp/build.json
+          jq -e '.conclusion == "success" and .head_branch == "main" and .event != "pull_request" and .path == ".github/workflows/build.yml"' /tmp/build.json
+          echo "id=$RUN" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .head_sha /tmp/build.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser
+          path: site
+          run-id: ${{ steps.build.outputs.id }}
+          github-token: ${{ github.token }}
+      - name: Verify artifact provenance
+        env:
+          SHA: ${{ steps.build.outputs.sha }}
+        run: jq -e --arg sha "$SHA" '.application == "TextSpace" and .host == "Uno WebAssembly" and .commit == $sha' site/build-info.json
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        id: deployment
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify public application
+        env:
+          TEXTSPACE_BASE_URL: ${{ steps.deployment.outputs.page_url }}
+          TEXTSPACE_EXPECTED_COMMIT: ${{ steps.build.outputs.sha }}
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TextSpace-public-pages-validation
+          path: test-results
+          if-no-files-found: ignore

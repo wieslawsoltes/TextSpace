@@ -1,0 +1,16 @@
+<Solution>
+ <Folder Name="/src/">
+  <Project Path="src/TextSpace.Core/TextSpace.Core.csproj" />
+  <Project Path="src/TextSpace.Documents/TextSpace.Documents.csproj" />
+  <Project Path="src/TextSpace.Editing/TextSpace.Editing.csproj" />
+  <Project Path="src/TextSpace.Layout/TextSpace.Layout.csproj" />
+  <Project Path="src/TextSpace.Skia/TextSpace.Skia.csproj" />
+  <Project Path="src/TextSpace.OpenXml/TextSpace.OpenXml.csproj" />
+  <Project Path="src/TextSpace.Storage/TextSpace.Storage.csproj" />
+  <Project Path="src/TextSpace.Controls/TextSpace.Controls.csproj" />
+  <Project Path="src/TextSpace.Editor/TextSpace.Editor.csproj" />
+  <Project Path="src/TextSpace.Workbench/TextSpace.Workbench.csproj" />
+  <Project Path="src/TextSpace.App/TextSpace.App.csproj" />
+ </Folder>
+ <Folder Name="/tests/"><Project Path="tests/TextSpace.Tests/TextSpace.Tests.csproj" /></Folder>
+</Solution>

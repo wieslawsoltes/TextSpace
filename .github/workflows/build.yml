@@ -10,15 +10,84 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  workbench:
+  engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - run: dotnet build src/TextSpace.Workbench/TextSpace.Workbench.csproj -c Release -p:TextSpaceDesktopOnly=true
+      - name: Test engine and interchange
+        run: dotnet test tests/TextSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TextSpace-engine-validation
+          path: artifacts/tests
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/fetch-assets.py
+      - run: dotnet build src/TextSpace.App -c Release -p:TextSpaceDesktopOnly=true
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: textspace-browser-${{ runner.os }}-${{ hashFiles('global.json', '**/*.csproj') }}
+      - name: Prepare WebAssembly and fonts
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          python3 scripts/fetch-assets.py
+      - name: Publish real Uno application
+        run: |
+          mkdir -p artifacts
+          dotnet publish src/TextSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/TextSpace/ 2>&1 | tee artifacts/browser-build.log
+          python3 scripts/collect-site.py artifacts/publish site
+      - name: Browser acceptance
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          mkdir -p test-site
+          ln -s "$PWD/site" test-site/TextSpace
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory test-site > artifacts/http.log 2>&1 &
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TextSpace-browser-validation
+          path: |
+            artifacts/*.log
+            test-results
+            package-lock.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-browser
+          path: site
+          include-hidden-files: true
   source:
     runs-on: ubuntu-latest
     steps:

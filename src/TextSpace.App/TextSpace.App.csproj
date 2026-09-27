@@ -1,0 +1,15 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-browserwasm;net10.0-desktop</TargetFrameworks>
+    <TargetFrameworks Condition="'$(TextSpaceDesktopOnly)' == 'true'">net10.0-desktop</TargetFrameworks>
+    <OutputType>Exe</OutputType><UnoSingleProject>true</UnoSingleProject><UnoFeatures>SkiaRenderer;</UnoFeatures>
+    <ApplicationTitle>TextSpace</ApplicationTitle><ApplicationId>io.github.wieslawsoltes.textspace</ApplicationId>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion><ApplicationVersion>1</ApplicationVersion><ApplicationPublisher>TextSpace contributors</ApplicationPublisher>
+    <Description>Local-first word processing with Uno Platform and SkiaSharp.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><IsPackable>false</IsPackable>
+    <UnoDisableHotDesign>true</UnoDisableHotDesign><UnoDisableMCPSupport>true</UnoDisableMCPSupport>
+    <RunAOTCompilation>false</RunAOTCompilation><WasmShellGenerateAOTProfile>false</WasmShellGenerateAOTProfile>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../TextSpace.Workbench/TextSpace.Workbench.csproj" /></ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'"><EmbeddedResource Include="Platforms/WebAssembly/WasmScripts/Host.js" /></ItemGroup>
+</Project>
