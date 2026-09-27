@@ -17,3 +17,15 @@ The accompanying JSON records were collected on .NET 10.0.12, Linux x64. Baselin
 ## Boundaries
 
 Repagination still walks the document and allocates independent output geometry. The document and public layout models are mutable; a layout index is a snapshot and must be rebuilt after mutating text intervals. The cache compares source runs rather than assuming all mutation goes through `EditorSession`. Snapshot undo and full-document index reconstruction remain; invalidation must be explicit before replacing them with cached state. HarfBuzz prefix measurement remains quadratic on cold very-long unbroken tokens. Benchmark results do not establish native UI, browser, memory working-set, or million-character editing performance.
+
+## Native shaped-text reuse
+
+`SkiaTextMetrics` also retains a separate LRU of origin-relative `SKTextBlob` resources (default 2,048 runs / 16 MiB estimated payload). Its key includes text, family, effective size, weight and slant, but not paint-only color, decorations, hyperlinks or baseline shifts. Clearing metrics or disposing the renderer releases native blobs. Do not mutate cache-owned fonts returned by `Font`; invalidate metrics after changing metric configuration. Both caches are single-writer resources.
+
+```sh
+dotnet run --project benchmarks/TextSpace.Performance -c Release -- --glyphs
+```
+
+`performance-glyphs.json` compares the previous direct `DrawShapedText` path with warm cached drawing on the same CPU Skia surface: 1,000 draws / 100 unique runs, three warmups, seven measured iterations. Median 13.0663 → 5.5165 ms, allocated managed bytes 1,636,040 → 40 (stopwatch allocation). The cached runs account for an estimated 65,020 bytes. This isolates drawing; it is not an end-to-end browser benchmark. Raster tests compare cached and uncached shaping at fixed coordinates for Latin ligatures, combining marks and Arabic; that does not establish full bidirectional paragraph correctness.
+
+Font/shaper/measurement caches outside these two LRUs retain their earlier behavior. The payload budgets do not include all native driver allocations or guarantee total process memory usage. The richer line breaker performs additional work on cache misses; monitor cold layout separately from warm reuse.

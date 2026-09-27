@@ -10,12 +10,13 @@ public sealed partial class DocxReader
     {
         var xml = RelatedXml("styles"); if (xml?.Root is null) return;
         _defaultStyle = ReadTextStyle(xml.Root.Element(W + "docDefaults")?.Element(W + "rPrDefault")?.Element(W + "rPr"), new());
+        _defaultParagraph = ReadParagraphFormat(xml.Root.Element(W + "docDefaults")?.Element(W + "pPrDefault")?.Element(W + "pPr"), new());
         var definitions = xml.Root.Elements(W + "style").Where(e => e.Attribute(W + "styleId") is not null).GroupBy(e => (string)e.Attribute(W + "styleId")!).ToDictionary(g => g.Key, g => g.First());
         (TextStyle, ParagraphFormat) ResolveStyle(string id, HashSet<string> visiting)
         {
             if (_styles.TryGetValue(id, out var value)) return value;
-            if (visiting.Count > 32 || !visiting.Add(id) || !definitions.TryGetValue(id, out var element)) return (_defaultStyle, new());
-            var parent = Val(element.Element(W + "basedOn")); var basis = parent is null ? (_defaultStyle, new ParagraphFormat()) : ResolveStyle(parent, visiting);
+            if (visiting.Count > 32 || !visiting.Add(id) || !definitions.TryGetValue(id, out var element)) return (_defaultStyle, _defaultParagraph);
+            var parent = Val(element.Element(W + "basedOn")); var basis = parent is null ? (_defaultStyle, _defaultParagraph) : ResolveStyle(parent, visiting);
             var character = ReadTextStyle(element.Element(W + "rPr"), basis.Item1); var paragraph = ReadParagraphFormat(element.Element(W + "pPr"), basis.Item2);
             paragraph = paragraph with { StyleName = Val(element.Element(W + "name")) ?? id };
             _styles[id] = (character, paragraph); visiting.Remove(id); return (character, paragraph);
@@ -43,7 +44,7 @@ public sealed partial class DocxReader
             Superscript = vertical is null ? basis.Superscript : vertical == "superscript", Subscript = vertical is null ? basis.Subscript : vertical == "subscript"
         };
     }
-    private static ParagraphFormat ReadParagraphFormat(XElement? properties, ParagraphFormat basis)
+    private ParagraphFormat ReadParagraphFormat(XElement? properties, ParagraphFormat basis)
     {
         if (properties is null) return basis;
         var spacing = properties.Element(W + "spacing"); var indent = properties.Element(W + "ind"); var alignment = Val(properties.Element(W + "jc")); var outline = Val(properties.Element(W + "outlineLvl")); var shade = (string?)properties.Element(W + "shd")?.Attribute(W + "fill");
@@ -55,7 +56,9 @@ public sealed partial class DocxReader
             FirstLineIndent = firstLine is not null ? Number((string?)firstLine) / 20 : hanging is not null ? -Number((string?)hanging) / 20 : basis.FirstLineIndent,
             SpaceBefore = Math.Max(0, Number((string?)spacing?.Attribute(W + "before"), basis.SpaceBefore * 20) / 20), SpaceAfter = Math.Max(0, Number((string?)spacing?.Attribute(W + "after"), basis.SpaceAfter * 20) / 20),
             LineSpacing = (string?)spacing?.Attribute(W + "lineRule") is null or "auto" ? Math.Clamp(Number((string?)spacing?.Attribute(W + "line"), basis.LineSpacing * 240) / 240, 0.5, 10) : basis.LineSpacing,
-            KeepWithNext = Flag(properties.Element(W + "keepNext"), basis.KeepWithNext), PageBreakBefore = Flag(properties.Element(W + "pageBreakBefore"), basis.PageBreakBefore),
+            KeepWithNext = Flag(properties.Element(W + "keepNext"), basis.KeepWithNext),
+            KeepLinesTogether = Flag(properties.Element(W + "keepLines"), basis.KeepLinesTogether), WidowControl = Flag(properties.Element(W + "widowControl"), basis.WidowControl),
+            TabStops = ReadTabs(properties, basis.TabStops), PageBreakBefore = Flag(properties.Element(W + "pageBreakBefore"), basis.PageBreakBefore),
             OutlineLevel = outline is not null ? Math.Clamp((int)Number(outline) + 1, 0, 9) : basis.OutlineLevel,
             ListLevel = (int)Number(Val(properties.Element(W + "numPr")?.Element(W + "ilvl")), basis.ListLevel), BorderBottom = properties.Element(W + "pBdr")?.Element(W + "bottom") is not null || basis.BorderBottom,
             Shading = shade is { Length: 6 } && shade.All(Uri.IsHexDigit) ? "#" + shade : basis.Shading

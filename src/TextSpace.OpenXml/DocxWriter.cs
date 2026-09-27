@@ -37,7 +37,7 @@ public sealed partial class DocxWriter
             Add(zip, "word/document.xml", new(E("document", new XAttribute(XNamespace.Xmlns + "w", W), new XAttribute(XNamespace.Xmlns + "r", R), new XAttribute(XNamespace.Xmlns + "wp", Wp), new XAttribute(XNamespace.Xmlns + "a", A), new XAttribute(XNamespace.Xmlns + "pic", Pic), body)));
             Add(zip, "word/styles.xml", Styles());
             Add(zip, "word/numbering.xml", Numbering());
-            Add(zip, "word/settings.xml", new(E("settings", E("zoom", new XAttribute(W + "percent", 100)), E("defaultTabStop", V(720)), DocumentSections.Definitions(document).Any(s => s.Options.DifferentOddAndEven) ? E("evenAndOddHeaders") : null, E("compat"))));
+            Add(zip, "word/settings.xml", new(E("settings", E("zoom", new XAttribute(W + "percent", 100)), E("defaultTabStop", V(Twips(document.DefaultTabStop))), DocumentSections.Definitions(document).Any(s => s.Options.DifferentOddAndEven) ? E("evenAndOddHeaders") : null, E("compat"))));
             foreach (var story in _storyParts) Add(zip, "word/" + story.Path, story.Xml);
             if (document.Comments.Count > 0) Add(zip, "word/comments.xml", Comments());
             Add(zip, "word/_rels/document.xml.rels", new(new XElement(Rel + "Relationships", _relationships)));

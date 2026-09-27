@@ -41,7 +41,7 @@ Evaluation never launches processes, runs scripts, reads local files, or retriev
 
 Apply Heading styles, place the insertion point outside the source heading text, and choose **References → Table of Contents**. The command creates hidden `_TextSpaceToc_…` bookmarks and live REF/PAGEREF entries. F9 refreshes entry text and displayed pages after edits. **Update Table** rebuilds the first generated contents block to include the current heading list.
 
-Insertion/rebuild is one undo transaction and refuses a selection that would remove its own heading sources. At most 1,000 nonempty heading paragraphs can be included. The generated entries remain editable, but editing inside a field result unlinks it as described above. DOCX exports these standard individual reference fields, not an enclosing Word TOC field. Full right-aligned dot-leader tab stops are not yet implemented.
+Insertion/rebuild is one undo transaction and refuses a selection that would remove its own heading sources. At most 1,000 nonempty heading paragraphs can be included. The generated entries remain editable, but editing inside a field result unlinks it as described above. DOCX exports these standard individual reference fields, not an enclosing Word TOC field. Generated entries use right-edge-aligned dot-leader tab stops. Native files keep these edge-relative; DOCX resolves them to absolute positions in the current column. See [Typography](TYPOGRAPHY.md).
 
 ## Embedding API
 

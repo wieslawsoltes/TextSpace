@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-alpha.1 — Typography and performance
+
+- Complete the previously uncommitted performance work: bounded paragraph-layout LRU, font-version invalidation, caret interval index, allocation-reduced hit testing, and shared pagination for printing/PNG export.
+- Add bounded native glyph-blob reuse with independent resource ownership and raster-equivalence tests.
+- Add left/center/right/decimal/bar tab stops, leaders, default intervals, right-edge anchoring, and complete set/clear dialogs.
+- Add widow/orphan, keep-lines, keep-next and page-break-before controls with measured paragraph-chain pagination and over-height progress guarantees.
+- Preserve word-break behavior across rich-run formatting boundaries; support discretionary hyphens, nonbreaking spaces/hyphens and zero-width breaks.
+- Generate live contents with right-aligned dot leaders; preserve supported typography in native files and standard WordprocessingML.
+- Add typography/interop, cache-invalidation and pagination regression tests plus real-input browser scenarios. Full Word compatibility remains explicitly out of scope for this release.
+
+
 ## 0.2.0-alpha.1 — Sections and fields
 
 - Added mixed-paper next/odd/even-page sections and explicit column breaks with nonprinting boundary markers.

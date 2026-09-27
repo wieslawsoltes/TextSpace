@@ -81,6 +81,7 @@ internal static partial class BrowserDiagnostics
                     json.WriteBoolean("underline", session.TypingStyle.Underline);
                     json.WriteNumber("fontSize", session.TypingStyle.FontSize); json.WriteString("fontFamily", session.TypingStyle.FontFamily);
                     json.WriteEndObject();
+                    WriteTypography(json, session, surface);
                     json.WriteBoolean("canUndo", session.CanUndo); json.WriteBoolean("canRedo", session.CanRedo);
                     json.WriteNumber("revision", session.Revision); json.WriteNumber("zoom", surface.Zoom);
                     json.WriteString("selectedTab", workbench.Ribbon.SelectedTab); json.WriteString("status", workbench.StatusText);

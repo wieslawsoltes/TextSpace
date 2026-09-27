@@ -64,7 +64,8 @@ public sealed partial class EditorSession
                 var paragraph = generated[i].Paragraph; var level = i == 0 ? 0 : headings[Math.Min(i - 1, headings.Length - 1)].Format.OutlineLevel;
                 var style = new TextStyle { FontSize = i == 0 ? 20 : 11, Bold = i == 0, Color = i == 0 ? "#0F4761" : "#202020" };
                 paragraph.DefaultStyle = style;
-                paragraph.Format = new() { StyleName = i == 0 ? "TOCHeading" : "TOC" + level, LeftIndent = Math.Max(0, level - 1) * 12, SpaceAfter = i == 0 ? 10 : 4, KeepWithNext = i == 0 };
+                paragraph.Format = new() { StyleName = i == 0 ? "TOCHeading" : "TOC" + level, LeftIndent = Math.Max(0, level - 1) * 12, SpaceAfter = i == 0 ? 10 : 4, KeepWithNext = i == 0,
+                    TabStops = i == 0 ? [] : [new TabStop { RelativeToRightEdge = true, Alignment = TabAlignment.Right, Leader = TabLeader.Dot }] };
                 foreach (var run in paragraph.Runs) run.Style = style;
             }
             foreach (var reference in references) Document.Fields.Add(new() { Start = reference.Start, End = reference.End, Instruction = reference.Instruction });

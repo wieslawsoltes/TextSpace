@@ -5,6 +5,8 @@ using TextSpace.Core;
 using TextSpace.Layout;
 using TextSpace.Skia;
 
+if (args.Contains("--glyphs")) { Console.WriteLine(GlyphBenchmark.Run()); return; }
+
 var document = new DocumentModel { Blocks = Enumerable.Range(0, 1000).Select(i => (Block)new Paragraph($"Paragraph {i}: The editor lays out a document with reusable paragraph geometry, rich formatting, and reliable caret navigation.")).ToList() };
 using var renderer = new DocumentRenderer();
 var measurement = new Dictionary<string, object>();

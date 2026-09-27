@@ -23,6 +23,7 @@ public sealed partial class DocxReader
     private readonly Dictionary<string, (string Name, int Start)> _bookmarkStarts = [];
     private readonly Dictionary<string, int> _bookmarkEnds = [];
     private TextStyle _defaultStyle = new();
+    private ParagraphFormat _defaultParagraph = new();
     private int _textPosition;
     private void Warn(string text) { if (!_warnings.Contains(text)) _warnings.Add(text); }
     public DocxImportResult Read(byte[] bytes)
@@ -30,7 +31,7 @@ public sealed partial class DocxReader
         if (bytes.Length > DocumentJson.MaxFileBytes) throw new InvalidDataException("DOCX files must be smaller than 32 MB.");
         using var input = new MemoryStream(bytes, false); using var zip = new ZipArchive(input, ZipArchiveMode.Read); _zip = zip;
         if (zip.Entries.Count > 10_000 || zip.Entries.Sum(e => e.Length) > 64L * 1024 * 1024 || zip.Entries.Any(e => e.Length > 32L * 1024 * 1024)) throw new InvalidDataException("The expanded DOCX exceeds the package safety limits.");
-        _warnings.Clear(); _styles.Clear(); _numbering.Clear(); _commentStarts.Clear(); _commentEnds.Clear(); _bookmarkStarts.Clear(); _bookmarkEnds.Clear(); _defaultStyle = new(); _textPosition = 0; _importedFields.Clear(); _sectionCursor = 0;
+        _warnings.Clear(); _styles.Clear(); _numbering.Clear(); _commentStarts.Clear(); _commentEnds.Clear(); _bookmarkStarts.Clear(); _bookmarkEnds.Clear(); _defaultStyle = new(); _defaultParagraph = new(); _textPosition = 0; _importedFields.Clear(); _sectionCursor = 0;
         var rootRelationships = Xml("_rels/.rels");
         _main = rootRelationships?.Root?.Elements(Rel + "Relationship").Where(e => ((string?)e.Attribute("Type"))?.EndsWith("/officeDocument", StringComparison.Ordinal) == true && (string?)e.Attribute("TargetMode") != "External").Select(e => Resolve("", (string?)e.Attribute("Target") ?? "")).FirstOrDefault() ?? "word/document.xml";
         var xml = Xml(_main) ?? throw new InvalidDataException("The package does not contain a Word document.");
@@ -44,7 +45,8 @@ public sealed partial class DocxReader
         var document = new DocumentModel
         {
             Blocks = ReadBlocks(body).ToList(), Page = firstSection.Page, Header = firstSection.Header ?? "", Footer = firstSection.Footer ?? "",
-            SectionOptions = firstSection.Options, Fields = _importedFields.ToList()
+            SectionOptions = firstSection.Options, Fields = _importedFields.ToList(),
+            DefaultTabStop = Number(Val(RelatedXml("settings")?.Root?.Element(W + "defaultTabStop")), 720) / 20
         };
         if (!document.Blocks.OfType<Paragraph>().Any()) document.Blocks.Add(new Paragraph());
         var core = Xml("docProps/core.xml"); XNamespace dc = "http://purl.org/dc/elements/1.1/";
@@ -117,7 +119,7 @@ public sealed partial class DocxReader
     private Paragraph ReadParagraph(XElement element)
     {
         var properties = element.Element(W + "pPr"); var styleId = Val(properties?.Element(W + "pStyle")) ?? "Normal";
-        var basis = _styles.TryGetValue(styleId, out var style) ? style : (_defaultStyle, new ParagraphFormat());
+        var basis = _styles.TryGetValue(styleId, out var style) ? style : (_defaultStyle, _defaultParagraph);
         var paragraph = new Paragraph { DefaultStyle = basis.Item1, Format = ReadParagraphFormat(properties, basis.Item2) };
         var numId = Val(properties?.Element(W + "numPr")?.Element(W + "numId"));
         if (numId is not null) paragraph.Format = paragraph.Format with { List = _numbering.GetValueOrDefault(numId, ListKind.Number), LeftIndent = Math.Max(0, paragraph.Format.LeftIndent - 18) };
@@ -149,6 +151,7 @@ public sealed partial class DocxReader
                         if (ReadFieldToken(token, paragraph, fieldStack)) continue;
                         if (fieldStack.Any(f => !f.InResult)) continue;
                         var text = token.Name == W + "t" ? token.Value : token.Name == W + "tab" ? "\t"
+                            : token.Name == W + "noBreakHyphen" ? "\u2011" : token.Name == W + "softHyphen" ? "\u00ad"
                             : token.Name == W + "cr" || token.Name == W + "br" && (string?)token.Attribute(W + "type") is not ("page" or "column") ? "\u2028" : "";
                         if (text.Length > 0) paragraph.Runs.Add(new(text, runStyle));
                     }
@@ -270,6 +273,8 @@ public sealed partial class DocxReader
                 }
                 else if (child.Name == W + "t") Append(child.Value);
                 else if (child.Name == W + "tab") Append("\t");
+                else if (child.Name == W + "softHyphen") Append("\u00ad");
+                else if (child.Name == W + "noBreakHyphen") Append("\u2011");
                 else if (child.Name == W + "br" || child.Name == W + "cr") Append("\n");
                 else if (child.Name == W + "drawing" || child.Name == W + "object" || child.Name == W + "tbl")
                     Warn("Rich header/footer objects are not imported; supported story text is retained.");

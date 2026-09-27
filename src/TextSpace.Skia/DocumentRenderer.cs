@@ -15,7 +15,7 @@ public sealed record RenderOptions
     public string? SelectedImageId { get; init; }
 }
 
-public sealed class DocumentRenderer : IDisposable
+public sealed partial class DocumentRenderer : IDisposable
 {
     private readonly Dictionary<string, SKBitmap> _images = [];
     public SkiaTextMetrics Metrics { get; } = new();
@@ -71,7 +71,8 @@ public sealed class DocumentRenderer : IDisposable
                     paint.Color = Color("#B5D7FA"); var x = chunk.Position(start - chunk.Start); var right = chunk.Position(end - chunk.Start);
                     canvas.DrawRect((float)x, (float)line.Y, (float)Math.Max(0.5, right - x), (float)line.Height, paint);
                 }
-                paint.Color = Color(chunk.Style.Color); Metrics.Draw(canvas, chunk.Text, chunk.X, line.Baseline, chunk.Style, paint);
+                paint.Color = Color(chunk.Style.Color); Metrics.Draw(canvas, chunk.DisplayText ?? chunk.Text, chunk.X, line.Baseline, chunk.Style, paint);
+                if (chunk.Text == "\t") DrawTabLeader(canvas, chunk, line, paint.Color);
                 if (chunk.Style.Underline || chunk.Style.Hyperlink is not null) { paint.StrokeWidth = 0.6f; canvas.DrawLine((float)chunk.X, (float)(line.Baseline + 1.5), (float)(chunk.X + chunk.Width), (float)(line.Baseline + 1.5), paint); }
                 if (chunk.Style.StrikeThrough) { paint.StrokeWidth = 0.6f; canvas.DrawLine((float)chunk.X, (float)(line.Baseline - chunk.Style.EffectiveSize * 0.3), (float)(chunk.X + chunk.Width), (float)(line.Baseline - chunk.Style.EffectiveSize * 0.3), paint); }
                 if (options.ShowFormatting && (chunk.Text.All(c => c == ' ') || chunk.Text == "\t"))
@@ -79,6 +80,7 @@ public sealed class DocumentRenderer : IDisposable
                     paint.Color = Color("#8F9BAB"); Metrics.Draw(canvas, chunk.Text == "\t" ? "→" : "·", chunk.X, line.Baseline, chunk.Style, paint);
                 }
             }
+            DrawBarTabs(canvas, line);
             if (line.Marker is not null) { paint.Color = Color(line.DefaultStyle.Color); Metrics.Draw(canvas, line.Marker, line.X - 14, line.Baseline, line.DefaultStyle, paint); }
             if (options.ShowFormatting && line.LastInParagraph) { paint.Color = Color("#8F9BAB"); Metrics.Draw(canvas, "¶", line.X + line.Width + 2, line.Baseline, line.DefaultStyle, paint); }
             if (line.Format.BorderBottom && line.LastInParagraph) { paint.Color = Color("#8E9EAD"); paint.StrokeWidth = 0.6f; canvas.DrawLine((float)line.X, (float)(line.Y + line.Height + 3), (float)(settings.Width - settings.MarginRight), (float)(line.Y + line.Height + 3), paint); }
@@ -115,7 +117,7 @@ public sealed class DocumentRenderer : IDisposable
                 DefaultStyle = headerStyle, Runs = [new(Fields(text).Replace("\r\n", "\u2028").Replace('\n', '\u2028').Replace('\r', '\u2028'), headerStyle)],
                 Format = new() { Alignment = footer ? TextAlignment.Center : TextAlignment.Left, SpaceAfter = 0, LineSpacing = 1 }
             };
-            var lines = new ParagraphLayouter(Metrics).Layout(paragraph, settings.ContentWidth, 0);
+            var lines = new ParagraphLayouter(Metrics).Layout(paragraph, settings.ContentWidth, 0, document.DefaultTabStop);
             var y = footer ? settings.Height - settings.FooterDistance - lines.Sum(l => l.Height) + lines[^1].Height - lines[^1].Ascent : settings.HeaderDistance - lines[0].Ascent;
             canvas.Save();
             canvas.ClipRect(footer ? SKRect.Create((float)settings.MarginLeft, (float)(settings.Height - settings.MarginBottom), (float)settings.ContentWidth, (float)settings.MarginBottom)

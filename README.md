@@ -10,7 +10,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 [![Pages](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml/badge.svg)](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Open the browser app](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Sections & fields](docs/SECTIONS-AND-FIELDS.md) · [Bookmarks](docs/BOOKMARKS.md) · [Publishing](docs/PUBLISHING.md) · [Compatibility](docs/COMPATIBILITY.md)
+[Open the browser app](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Sections & fields](docs/SECTIONS-AND-FIELDS.md) · [Typography](docs/TYPOGRAPHY.md) · [Performance](docs/PERFORMANCE.md) · [Bookmarks](docs/BOOKMARKS.md) · [Publishing](docs/PUBLISHING.md) · [Compatibility](docs/COMPATIBILITY.md)
 
 </div>
 
@@ -18,7 +18,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 
 TextSpace is an independent, local-first word processor implemented in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are assembled from reusable libraries—not an embedded web editor or a screenshot of another application.
 
-> **Development preview: 0.2.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
+> **Development preview: 0.3.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
 
 ## The workspace
 
@@ -27,8 +27,8 @@ The custom ribbon groups commands into Home, Insert, Design, Layout, References,
 | Area | Implemented scope |
 | :--- | :--- |
 | Editing | Rich runs, paragraph splitting/joining, grapheme-safe selection, atomic transactions, bounded undo/redo and native input integration |
-| Typography | Font metadata, size, emphasis, super/subscript, colors, highlighting, styles, paragraph spacing and alignment |
-| Layout | Mixed-size sections, next/odd/even-page and column breaks, per-section numbering, linked first/even/default headers and footers |
+| Typography | Font metadata, size, emphasis, super/subscript, colors, highlighting, styles, paragraph spacing and alignment; aligned tab stops and leaders; discretionary/nonbreaking hyphens |
+| Layout | Mixed-size sections, next/odd/even-page and column breaks, per-section numbering, linked first/even/default headers and footers; widow/orphan and keep-paragraph controls |
 | Fields and contents | Live metadata, dates, sequences, bookmark/page references, F9 update, field locks, and linked table-of-contents entries |
 | Tables and pictures | Editable cells, row/column insertion and deletion, shading, in-flow PNG/JPEG/GIF pictures, sizing and alternative text |
 | Navigation | Heading outline, page previews, search/replace, bookmarks, internal hyperlinks and safe external link navigation |
@@ -52,6 +52,14 @@ Use **Layout → Section Break** to separate portrait, landscape, or differently
 **Insert → Field** creates live cached results such as `TITLE`, `PAGE`, `SEQ Figure`, `REF Details \h`, or `PAGEREF Details \h`. **F9** updates results and pagination atomically; **Manage Fields** edits instructions, locks/unlocks, navigates, or unlinks results. Changing text inside a field converts it to ordinary editable text.
 
 **References → Table of Contents** now creates linked `REF`/`PAGEREF` entries. F9 refreshes their text and pages; Update Table rebuilds the heading list. DOCX preserves supported field instructions and section properties rather than flattening every field and section. [Detailed API, workflow, and interoperability contract](docs/SECTIONS-AND-FIELDS.md).
+
+### Typography and pagination
+
+**Layout → Tabs** configures left, center, right, decimal and bar stops with dot, hyphen, line, heavy-line or middle-dot leaders. Set or clear stops, then Apply to selected paragraphs. Right-edge stops follow the current column width. The document-wide default interval is editable. **Layout → Pagination** exposes widow/orphan control, Keep with next, Keep lines together, and Page break before; the Paragraph dialog exposes the same flags.
+
+Generated live contents now use right-aligned dot leaders, without inserting dot characters into the document text. **Insert → Special Characters** inserts tabs, nonbreaking spaces/hyphens, optional hyphens and zero-width break opportunities. Formatting boundaries inside words no longer create artificial line-break opportunities. Optional hyphens become visible only when used for a break. [Typography and interoperability details](docs/TYPOGRAPHY.md).
+
+The renderer now reuses bounded paragraph geometry and native shaped-text blobs, indexes caret intervals, and shares existing pagination with PNG export/printing. Benchmarks, raw results, invalidation rules, and remaining hot paths are documented in [Performance engineering](docs/PERFORMANCE.md). Engine microbenchmarks are not browser frame-rate guarantees.
 
 ## Ten reusable libraries
 
