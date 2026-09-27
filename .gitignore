@@ -4,6 +4,7 @@
 .idea/
 artifacts/
 site/
+test-site/
 node_modules/
 playwright-report/
 test-results/
@@ -11,3 +12,6 @@ test-results/
 *.nupkg
 *.snupkg
 src/TextSpace.App/Assets/Fonts/*.ttf
+src/TextSpace.App/Assets/Fonts/*.source
+src/TextSpace.App/Assets/Fonts/*-OFL.txt
+src/TextSpace.App/Assets/Fonts/asset-manifest.json
