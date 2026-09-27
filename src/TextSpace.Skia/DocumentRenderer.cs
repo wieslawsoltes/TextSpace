@@ -19,7 +19,8 @@ public sealed class DocumentRenderer : IDisposable
 {
     private readonly Dictionary<string, SKBitmap> _images = [];
     public SkiaTextMetrics Metrics { get; } = new();
-    public DocumentLayout Layout(DocumentModel document) => new PageLayoutEngine(Metrics).Layout(document);
+    private PageLayoutEngine? _layoutEngine;
+    public DocumentLayout Layout(DocumentModel document) => (_layoutEngine ??= new PageLayoutEngine(Metrics)).Layout(document);
     public static SKColor Color(string? text, string fallback = "#202020") => SKColor.TryParse(text ?? fallback, out var color) ? color : SKColor.Parse(fallback);
     private static SKRect Rect(RectD r) => SKRect.Create((float)r.X, (float)r.Y, (float)r.Width, (float)r.Height);
     public void ClearImages() { foreach (var bitmap in _images.Values) bitmap.Dispose(); _images.Clear(); }
@@ -144,9 +145,13 @@ public sealed class DocumentRenderer : IDisposable
         }
         return output.ToArray();
     }
-    public byte[] ExportPng(DocumentModel document, int pageIndex = 0, double scale = 2)
+    public byte[] ExportPng(DocumentModel document, int pageIndex = 0, double scale = 2) => ExportPng(document, Layout(document), pageIndex, scale);
+
+    /// <summary>Exports an existing layout snapshot. The caller supplies the corresponding document state.</summary>
+    public byte[] ExportPng(DocumentModel document, DocumentLayout layout, int pageIndex = 0, double scale = 2)
     {
-        var layout = Layout(document); pageIndex = Math.Clamp(pageIndex, 0, layout.Pages.Count - 1);
+        ArgumentNullException.ThrowIfNull(document); ArgumentNullException.ThrowIfNull(layout);
+        pageIndex = Math.Clamp(pageIndex, 0, layout.Pages.Count - 1);
         if (!double.IsFinite(scale) || scale is <= 0 or > 8) throw new ArgumentOutOfRangeException(nameof(scale));
         var settings = layout.Pages[pageIndex].Settings;
         var pixelWidth = (int)Math.Ceiling(settings.Width * scale); var pixelHeight = (int)Math.Ceiling(settings.Height * scale);
@@ -155,5 +160,5 @@ public sealed class DocumentRenderer : IDisposable
         surface.Canvas.Scale((float)scale); DrawPage(surface.Canvas, document, layout, pageIndex, new() { ShowComments = false, ShowChanges = false });
         using var image = surface.Snapshot(); using var data = image.Encode(SKEncodedImageFormat.Png, 100); return data.ToArray();
     }
-    public void Dispose() { ClearImages(); Metrics.Dispose(); }
+    public void Dispose() { ClearImages(); _layoutEngine?.ParagraphCache.Clear(); Metrics.Dispose(); }
 }

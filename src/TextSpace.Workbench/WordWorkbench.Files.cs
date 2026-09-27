@@ -71,7 +71,7 @@ public sealed partial class WordWorkbench
                 case "textspace": bytes = Encoding.UTF8.GetBytes(DocumentJson.Save(Session.Document)); type = "application/vnd.textspace+json"; break;
                 case "docx": bytes = new DocxWriter().Write(Session.Document); type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; break;
                 case "pdf": bytes = Surface.Renderer.ExportPdf(Session.Document, Surface.Layout); type = "application/pdf"; break;
-                case "png": bytes = Surface.Renderer.ExportPng(Session.Document, Surface.Layout.Caret(Session.Selection.Active).PageIndex); type = "image/png"; break;
+                case "png": bytes = Surface.Renderer.ExportPng(Session.Document, Surface.Layout, Surface.Layout.Caret(Session.Selection.Active).PageIndex); type = "image/png"; break;
                 case "html": bytes = Encoding.UTF8.GetBytes(HtmlExporter.Export(Session.Document)); type = "text/html;charset=utf-8"; break;
                 case "txt": bytes = Encoding.UTF8.GetBytes(Session.Document.PlainText); type = "text/plain;charset=utf-8"; break;
                 default: throw new ArgumentOutOfRangeException(nameof(format));
@@ -95,7 +95,7 @@ public sealed partial class WordWorkbench
         html.Append("</style></head><body>");
         for (var i = 0; i < Surface.Layout.Pages.Count; i++)
         {
-            var png = Surface.Renderer.ExportPng(Session.Document, i, 1.5); html.Append("<img class=\"sheet").Append(i).Append("\" alt=\"Page ").Append(i + 1).Append("\" src=\"data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("\">");
+            var png = Surface.Renderer.ExportPng(Session.Document, Surface.Layout, i, 1.5); html.Append("<img class=\"sheet").Append(i).Append("\" alt=\"Page ").Append(i + 1).Append("\" src=\"data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("\">");
             if (html.Length > 80 * 1024 * 1024) throw new InvalidOperationException("Print preview exceeds the browser memory budget. Export to PDF instead.");
         }
         html.Append("</body></html>"); await Host.PrintHtmlAsync(html.ToString());
