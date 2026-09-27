@@ -1,0 +1,25 @@
+name: Dependency audit
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/dependencies.yml']
+  schedule:
+    - cron: '0 8 * * 1'
+permissions:
+  contents: read
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report current stable package versions
+        shell: python
+        run: |
+          import json, urllib.request
+          for package in ['uno.sdk', 'uno.winui', 'skiasharp', 'skiasharp.harfbuzz', 'documentformat.openxml', 'microsoft.net.test.sdk', 'xunit', 'xunit.runner.visualstudio']:
+              with urllib.request.urlopen(f'https://api.nuget.org/v3-flatcontainer/{package}/index.json') as response:
+                  versions = json.load(response)['versions']
+              stable = [v for v in versions if '-' not in v]
+              print(f'{package}: {stable[-1]}')
+          with urllib.request.urlopen('https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json') as response:
+              data = json.load(response)
+          print('dotnet-sdk:', data['latest-sdk'])
