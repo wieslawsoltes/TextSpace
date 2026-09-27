@@ -21,14 +21,17 @@ jobs:
           from pathlib import Path
           p=Path('scripts/sections-fields-check.mjs')
           text=p.read_text()
-          assert text.count('controls.find(')+text.count('controls.findLast(')==1
-          p.write_text(text.replace('controls.find(', 'controls.findLast('))
+          text=text.replace('controls.find(', 'controls.findLast(')
+          text=text.replace('async function click(name) {', 'async function click(name, minimumWidth = 0) {')
+          text=text.replace('return c && c.x', 'return c && c.width >= minimumWidth && c.x')
+          text=text.replace("await click('Rename document');", "await click('Rename document', 300);")
+          p.write_text(text)
           PY
           git add scripts/sections-fields-check.mjs
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'test: target the foreground control when backstage duplicates a command name'
+            git commit -m 'test: await the foreground backstage rename card before clicking'
             git push origin HEAD:feat/sections-fields
           fi
       - uses: actions/download-artifact@v4
