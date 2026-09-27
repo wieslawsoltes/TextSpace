@@ -105,7 +105,7 @@ public sealed partial class EditorSession
     public void ToggleList(ListKind kind) => FormatParagraph("List", p => p with { List = p.List == kind ? ListKind.None : kind });
     public void Indent(int direction) => FormatParagraph("Indent", p => p with
     {
-        LeftIndent = Math.Clamp(p.LeftIndent + direction * 18, 0, Math.Max(0, Document.Page.ColumnWidth - 36)),
+        LeftIndent = Math.Clamp(p.LeftIndent + direction * 18, 0, Math.Max(0, CurrentSection.Page.ColumnWidth - 36)),
         ListLevel = Math.Clamp(p.ListLevel + direction, 0, 8)
     });
 
@@ -146,7 +146,7 @@ public sealed partial class EditorSession
     public void SetPage(Func<PageSettings, PageSettings> transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
-        Execute("Page setup", () => Document.Page = transform(Document.Page)
-            ?? throw new ArgumentException("Page settings cannot be null.", nameof(transform)));
+        SetSection(section => section with { Page = transform(section.Page)
+            ?? throw new ArgumentException("Page settings cannot be null.", nameof(transform)) });
     }
 }

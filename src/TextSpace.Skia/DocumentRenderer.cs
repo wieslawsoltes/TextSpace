@@ -90,10 +90,43 @@ public sealed class DocumentRenderer : IDisposable
                 paint.Color = Color("#C43E1C"); paint.StrokeWidth = 1.5f; canvas.DrawLine((float)(settings.MarginLeft - 14), (float)line.Y, (float)(settings.MarginLeft - 14), (float)(line.Y + line.Height), paint);
             }
         }
+        if (options.ShowFormatting)
+        {
+            var markerStyle = new TextStyle { FontSize = 7, Color = "#8F9BAB" };
+            foreach (var marker in page.Breaks)
+            {
+                paint.Color = Color(markerStyle.Color); paint.StrokeWidth = 0.4f;
+                var width = Metrics.Measure(marker.Label, markerStyle).Width; var center = marker.X + marker.Width / 2;
+                canvas.DrawLine((float)marker.X, (float)(marker.Y + 5), (float)Math.Max(marker.X, center - width / 2 - 4), (float)(marker.Y + 5), paint);
+                canvas.DrawLine((float)Math.Min(marker.X + marker.Width, center + width / 2 + 4), (float)(marker.Y + 5), (float)(marker.X + marker.Width), (float)(marker.Y + 5), paint);
+                Metrics.Draw(canvas, marker.Label, center - width / 2, marker.Y + 7, markerStyle, paint);
+            }
+        }
         var headerStyle = new TextStyle { FontSize = 8, Color = "#777777" }; paint.Color = Color(headerStyle.Color);
-        string Fields(string text) => text.Replace("{PAGE}", (pageIndex + 1).ToString()).Replace("{NUMPAGES}", layout.Pages.Count.ToString());
-        Metrics.Draw(canvas, Fields(document.Header), settings.MarginLeft, settings.HeaderDistance, headerStyle, paint);
-        var footer = Fields(document.Footer); Metrics.Draw(canvas, footer, (settings.Width - Metrics.Measure(footer, headerStyle).Width) / 2, settings.Height - settings.FooterDistance, headerStyle, paint);
+        string Fields(string text) => text.Replace("{PAGE}", DocumentSections.FormatNumber(page.PageNumber, page.Section.Options.NumberStyle))
+            .Replace("{NUMPAGES}", layout.Pages.Count.ToString()).Replace("{SECTION}", (page.SectionIndex + 1).ToString())
+            .Replace("{SECTIONPAGES}", page.SectionPageCount.ToString()).Replace("{TITLE}", document.Title).Replace("{AUTHOR}", document.Author);
+        void Story(string text, bool footer)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            var paragraph = new Paragraph
+            {
+                DefaultStyle = headerStyle, Runs = [new(Fields(text).Replace("\r\n", "\u2028").Replace('\n', '\u2028').Replace('\r', '\u2028'), headerStyle)],
+                Format = new() { Alignment = footer ? TextAlignment.Center : TextAlignment.Left, SpaceAfter = 0, LineSpacing = 1 }
+            };
+            var lines = new ParagraphLayouter(Metrics).Layout(paragraph, settings.ContentWidth, 0);
+            var y = footer ? settings.Height - settings.FooterDistance - lines.Sum(l => l.Height) + lines[^1].Height - lines[^1].Ascent : settings.HeaderDistance - lines[0].Ascent;
+            canvas.Save();
+            canvas.ClipRect(footer ? SKRect.Create((float)settings.MarginLeft, (float)(settings.Height - settings.MarginBottom), (float)settings.ContentWidth, (float)settings.MarginBottom)
+                : SKRect.Create((float)settings.MarginLeft, 0, (float)settings.ContentWidth, (float)settings.MarginTop));
+            foreach (var line in lines)
+            {
+                foreach (var chunk in line.Chunks) Metrics.Draw(canvas, chunk.Text, settings.MarginLeft + chunk.X, y + line.Ascent, chunk.Style, paint);
+                y += line.Height;
+            }
+            canvas.Restore();
+        }
+        Story(page.Header, false); Story(page.Footer, true);
         if (options.DrawCaret && options.Selection.IsEmpty)
         {
             var caret = layout.Caret(options.Selection.Active); if (caret.PageIndex == pageIndex) { paint.Color = Color("#111111"); paint.StrokeWidth = 0.8f; canvas.DrawLine((float)caret.X, (float)caret.Y, (float)caret.X, (float)(caret.Y + caret.Height), paint); }
@@ -106,7 +139,7 @@ public sealed class DocumentRenderer : IDisposable
         using (var pdf = SKDocument.CreatePdf(output, new SKDocumentPdfMetadata { Title = document.Title, Author = document.Author, Creator = "TextSpace" }))
         {
             if (pdf is null) throw new NotSupportedException("PDF creation is not available in this Skia runtime.");
-            for (var i = 0; i < layout.Pages.Count; i++) { var canvas = pdf.BeginPage((float)layout.Settings.Width, (float)layout.Settings.Height); DrawPage(canvas, document, layout, i, new() { ShowChanges = false, ShowComments = false }); pdf.EndPage(); }
+            for (var i = 0; i < layout.Pages.Count; i++) { var canvas = pdf.BeginPage((float)layout.Pages[i].Settings.Width, (float)layout.Pages[i].Settings.Height); DrawPage(canvas, document, layout, i, new() { ShowChanges = false, ShowComments = false }); pdf.EndPage(); }
             pdf.Close();
         }
         return output.ToArray();
@@ -114,7 +147,11 @@ public sealed class DocumentRenderer : IDisposable
     public byte[] ExportPng(DocumentModel document, int pageIndex = 0, double scale = 2)
     {
         var layout = Layout(document); pageIndex = Math.Clamp(pageIndex, 0, layout.Pages.Count - 1);
-        using var surface = SKSurface.Create(new SKImageInfo((int)Math.Ceiling(layout.Width * scale), (int)Math.Ceiling(layout.Settings.Height * scale)));
+        if (!double.IsFinite(scale) || scale is <= 0 or > 8) throw new ArgumentOutOfRangeException(nameof(scale));
+        var settings = layout.Pages[pageIndex].Settings;
+        var pixelWidth = (int)Math.Ceiling(settings.Width * scale); var pixelHeight = (int)Math.Ceiling(settings.Height * scale);
+        if ((long)pixelWidth * pixelHeight > 64_000_000) throw new InvalidOperationException("The page image exceeds 64 megapixels.");
+        using var surface = SKSurface.Create(new SKImageInfo(pixelWidth, pixelHeight)) ?? throw new InvalidOperationException("The page image could not be allocated.");
         surface.Canvas.Scale((float)scale); DrawPage(surface.Canvas, document, layout, pageIndex, new() { ShowComments = false, ShowChanges = false });
         using var image = surface.Snapshot(); using var data = image.Encode(SKEncodedImageFormat.Png, 100); return data.ToArray();
     }

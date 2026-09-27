@@ -10,7 +10,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 [![Pages](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml/badge.svg)](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Open the browser app](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Bookmarks](docs/BOOKMARKS.md) · [Publishing](docs/PUBLISHING.md) · [Compatibility](docs/COMPATIBILITY.md)
+[Open the browser app](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Sections & fields](docs/SECTIONS-AND-FIELDS.md) · [Bookmarks](docs/BOOKMARKS.md) · [Publishing](docs/PUBLISHING.md) · [Compatibility](docs/COMPATIBILITY.md)
 
 </div>
 
@@ -18,7 +18,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 
 TextSpace is an independent, local-first word processor implemented in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are assembled from reusable libraries—not an embedded web editor or a screenshot of another application.
 
-> **Development preview: 0.1.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
+> **Development preview: 0.2.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
 
 ## The workspace
 
@@ -28,7 +28,8 @@ The custom ribbon groups commands into Home, Insert, Design, Layout, References,
 | :--- | :--- |
 | Editing | Rich runs, paragraph splitting/joining, grapheme-safe selection, atomic transactions, bounded undo/redo and native input integration |
 | Typography | Font metadata, size, emphasis, super/subscript, colors, highlighting, styles, paragraph spacing and alignment |
-| Layout | Paper dimensions, margins, page breaks, columns, repeated header/footer text, page placeholders, rulers and previews |
+| Layout | Mixed-size sections, next/odd/even-page and column breaks, per-section numbering, linked first/even/default headers and footers |
+| Fields and contents | Live metadata, dates, sequences, bookmark/page references, F9 update, field locks, and linked table-of-contents entries |
 | Tables and pictures | Editable cells, row/column insertion and deletion, shading, in-flow PNG/JPEG/GIF pictures, sizing and alternative text |
 | Navigation | Heading outline, page previews, search/replace, bookmarks, internal hyperlinks and safe external link navigation |
 | Review | Anchored comments/replies, resolved threads, local tracked-text edits and guarded rejection |
@@ -43,6 +44,14 @@ The document is rendered by SkiaSharp. Edits pass through a UI-independent sessi
 Select a range and choose **Insert → Navigation → Bookmark**. Add, move, rename, delete, or navigate named ranges. Bookmarks follow text and table edits; undo restores their state. Renaming updates matching internal links atomically. Use an address such as `#TechnicalDetails` in the Link dialog, then **Open Link** or Control/Command-click the rendered link.
 
 Bookmarks are preserved in native files and exported as real WordprocessingML bookmark markers in DOCX. HTML output contains named targets, safe links, escaped font-family CSS, validated colors and a restrictive content-security policy. [Read the bookmark contract](docs/BOOKMARKS.md).
+
+### Sections, fields, and live contents
+
+Use **Layout → Section Break** to separate portrait, landscape, or differently sized parts of the same document. Page Setup applies to the current section. **Section Settings** controls numbering restarts, Roman/alphabetic formats, first/even-page variants, and links to previous headers/footers. The editor, ruler, previews, PDF, and PNG share the same variable-size page geometry.
+
+**Insert → Field** creates live cached results such as `TITLE`, `PAGE`, `SEQ Figure`, `REF Details \h`, or `PAGEREF Details \h`. **F9** updates results and pagination atomically; **Manage Fields** edits instructions, locks/unlocks, navigates, or unlinks results. Changing text inside a field converts it to ordinary editable text.
+
+**References → Table of Contents** now creates linked `REF`/`PAGEREF` entries. F9 refreshes their text and pages; Update Table rebuilds the heading list. DOCX preserves supported field instructions and section properties rather than flattening every field and section. [Detailed API, workflow, and interoperability contract](docs/SECTIONS-AND-FIELDS.md).
 
 ## Ten reusable libraries
 

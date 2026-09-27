@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using TextSpace.Core;
+using TextSpace.Documents;
 using static TextSpace.OpenXml.Ooxml;
 
 namespace TextSpace.OpenXml;
@@ -15,6 +16,7 @@ public sealed partial class DocxWriter
             {
                 case Paragraph p: yield return WriteParagraph(p); break;
                 case PageBreakBlock: yield return E("p", E("r", E("br", new XAttribute(W + "type", "page")))); break;
+                case ColumnBreakBlock: yield return E("p", E("r", E("br", new XAttribute(W + "type", "column")))); break;
                 case ImageBlock image: yield return Picture(image); break;
                 case TableBlock table: yield return Table(table); break;
             }
@@ -23,8 +25,15 @@ public sealed partial class DocxWriter
     private XElement WriteParagraph(Paragraph paragraph)
     {
         var result = E("p", ParagraphProperties(paragraph.Format)); var start = _index.StartOf(paragraph); var position = 0;
+        static bool Locked(DocumentField field)
+        {
+            try { return field.Locked || !FieldInstruction.Parse(field.Instruction).Supported; }
+            catch (FormatException) { return true; }
+        }
+        var fields = _document.Fields.Where(f => f.Start >= start && f.End <= start + paragraph.Length).ToArray();
         void Mark(int offset)
         {
+            foreach (var field in fields.Where(f => f.End == start + offset)) result.Add(E("r", E("fldChar", new XAttribute(W + "fldCharType", "end"))));
             foreach (var (bookmark, id) in _document.Bookmarks.Select((b, i) => (b, i)))
             {
                 if (bookmark.Start == start + offset) result.Add(E("bookmarkStart", new XAttribute(W + "id", id), new XAttribute(W + "name", bookmark.Name)));
@@ -35,12 +44,17 @@ public sealed partial class DocxWriter
                 if (comment.Start == start + offset) result.Add(E("commentRangeStart", new XAttribute(W + "id", id)));
                 if (comment.End == start + offset) result.Add(E("commentRangeEnd", new XAttribute(W + "id", id)), E("r", E("commentReference", new XAttribute(W + "id", id))));
             }
+            foreach (var field in fields.Where(f => f.Start == start + offset))
+                result.Add(E("r", E("fldChar", new XAttribute(W + "fldCharType", "begin"), Locked(field) ? new XAttribute(W + "fldLock", "true") : null)),
+                    E("r", E("instrText", new XAttribute(XNamespace.Xml + "space", "preserve"), " " + field.Instruction + " ")),
+                    E("r", E("fldChar", new XAttribute(W + "fldCharType", "separate"))));
         }
         Mark(0);
         foreach (var run in paragraph.Runs)
         {
             var boundaries = _document.Comments.SelectMany(c => new[] { c.Start - start, c.End - start })
                 .Concat(_document.Bookmarks.SelectMany(b => new[] { b.Start - start, b.End - start }))
+                .Concat(fields.SelectMany(f => new[] { f.Start - start, f.End - start }))
                 .Where(i => i > position && i < position + run.Text.Length).Append(position + run.Text.Length).Distinct().Order().ToArray(); var at = position;
             foreach (var end in boundaries)
             {
@@ -77,15 +91,16 @@ public sealed partial class DocxWriter
         E("spacing", new XAttribute(W + "before", Twips(f.SpaceBefore)), new XAttribute(W + "after", Twips(f.SpaceAfter)), new XAttribute(W + "line", (int)Math.Round(f.LineSpacing * 240)), new XAttribute(W + "lineRule", "auto")),
         E("ind", new XAttribute(W + "left", Twips(f.LeftIndent + (f.List != ListKind.None ? 18 : 0))), new XAttribute(W + "right", Twips(f.RightIndent)), f.FirstLineIndent >= 0 ? new XAttribute(W + "firstLine", Twips(f.FirstLineIndent)) : new XAttribute(W + "hanging", Twips(-f.FirstLineIndent))),
         E("jc", V(f.Alignment == TextAlignment.Justify ? "both" : f.Alignment.ToString().ToLowerInvariant())), f.OutlineLevel > 0 ? E("outlineLvl", V(f.OutlineLevel - 1)) : null);
-    private static XElement HeaderFooter(string text, bool centered = false)
+    private XElement HeaderFooter(string text, bool centered = false)
     {
+        text = text.Replace("\r\n", "\u2028").Replace('\n', '\u2028').Replace('\r', '\u2028');
         var p = E("p", E("pPr", E("jc", V(centered ? "center" : "left")))); var style = new TextStyle { FontSize = 8, Color = "#777777" };
-        foreach (var part in System.Text.RegularExpressions.Regex.Split(text, @"(\{PAGE\}|\{NUMPAGES\})")) p.Add(part is "{PAGE}" or "{NUMPAGES}" ? E("fldSimple", new XAttribute(W + "instr", part.Trim('{', '}')), Run("1", style)) : Run(part, style)); return p;
+        foreach (var part in System.Text.RegularExpressions.Regex.Split(text, @"(\{PAGE\}|\{NUMPAGES\}|\{SECTION\}|\{SECTIONPAGES\}|\{TITLE\}|\{AUTHOR\})")) p.Add(part is "{PAGE}" or "{NUMPAGES}" or "{SECTION}" or "{SECTIONPAGES}" or "{TITLE}" or "{AUTHOR}" ? E("fldSimple", new XAttribute(W + "instr", part.Trim('{', '}')), Run(part == "{TITLE}" ? _document.Title : part == "{AUTHOR}" ? _document.Author : "1", style)) : Run(part, style)); return p;
     }
     private XElement Table(TableBlock table)
     {
         var count = table.Rows.Max(r => r.Cells.Count); var weights = table.ColumnWidths.Count == count && table.ColumnWidths.All(w => w > 0 && double.IsFinite(w)) ? table.ColumnWidths.ToArray() : Enumerable.Repeat(1d, count).ToArray();
-        var widths = weights.Select(w => Twips(_document.Page.ColumnWidth * w / weights.Sum())).ToArray();
+        var widths = weights.Select(w => Twips(_availableTableWidth * w / weights.Sum())).ToArray();
         var borders = E("tblBorders", new[] { "top", "left", "bottom", "right", "insideH", "insideV" }.Select(side => E(side, V("single"), new XAttribute(W + "sz", 4), new XAttribute(W + "color", "A8B7C8"))));
         var margins = E("tblCellMar", new[] { "top", "left", "bottom", "right" }.Select(side => E(side, new XAttribute(W + "w", Twips(table.CellPadding)), new XAttribute(W + "type", "dxa"))));
         var result = E("tbl", E("tblPr", E("tblW", new XAttribute(W + "w", widths.Sum()), new XAttribute(W + "type", "dxa")), borders, E("tblLayout", new XAttribute(W + "type", "fixed")), margins), E("tblGrid", widths.Select(w => E("gridCol", new XAttribute(W + "w", w)))));
@@ -95,7 +110,10 @@ public sealed partial class DocxWriter
             for (var c = 0; c < table.Rows[r].Cells.Count; c++)
             {
                 var cell = table.Rows[r].Cells[c]; var fill = cell.Shading ?? (table.HeaderRow && r == 0 ? "#D9E5F5" : table.BandedRows && r % 2 == 0 ? "#F3F6FA" : null);
+                var parentWidth = _availableTableWidth;
+                _availableTableWidth = Math.Max(24, widths[c] / 20d - 2 * table.CellPadding);
                 var element = E("tc", E("tcPr", E("tcW", new XAttribute(W + "w", widths[c]), new XAttribute(W + "type", "dxa")), fill is null ? null : E("shd", V("clear"), new XAttribute(W + "fill", Hex(fill)))), Blocks(cell.Blocks));
+                _availableTableWidth = parentWidth;
                 if (cell.Blocks.LastOrDefault() is not Paragraph) element.Add(E("p")); row.Add(element);
             }
             result.Add(row);

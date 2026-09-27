@@ -18,12 +18,13 @@ public sealed class DocumentPreview : SKCanvasElement
     {
         if (Document is null || Renderer is null) return;
         var layout = Layout ?? Renderer.Layout(Document);
-        var scale = Math.Min(area.Width / layout.Settings.Width, area.Height / layout.Settings.Height);
+        var settings = layout.Pages[Math.Clamp(PageIndex, 0, layout.Pages.Count - 1)].Settings;
+        var scale = Math.Min(area.Width / settings.Width, area.Height / settings.Height);
         canvas.Clear(SKColors.Transparent); canvas.Save();
-        canvas.Translate((float)(area.Width - layout.Settings.Width * scale) / 2, (float)(area.Height - layout.Settings.Height * scale) / 2);
+        canvas.Translate((float)(area.Width - settings.Width * scale) / 2, (float)(area.Height - settings.Height * scale) / 2);
         canvas.Scale((float)scale);
         Renderer.DrawPage(canvas, Document, layout, Math.Clamp(PageIndex, 0, layout.Pages.Count - 1), new() { ShowChanges = false, ShowComments = false });
         using var border = new SKPaint { Color = SKColor.Parse("#C8C8C8"), Style = SKPaintStyle.Stroke, StrokeWidth = (float)(1 / scale) };
-        canvas.DrawRect(0, 0, (float)layout.Settings.Width, (float)layout.Settings.Height, border); canvas.Restore();
+        canvas.DrawRect(0, 0, (float)settings.Width, (float)settings.Height, border); canvas.Restore();
     }
 }

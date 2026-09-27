@@ -33,19 +33,49 @@ public static class MailMerge
     public static DocumentModel Merge(DocumentModel template, IReadOnlyDictionary<string, string> record)
     {
         var result = DocumentJson.Clone(template);
-        foreach (var paragraph in result.Paragraphs())
+        var index = new TextIndex(result);
+        var plans = new List<(Paragraph Paragraph, int Local, int Global, int Length, string Text)>();
+        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in record)
         {
-            var text = paragraph.Text; var replacements = new List<(int Start, int Length, string Text)>();
-            foreach (var pair in record)
+            if (!unique.Add(pair.Key)) throw new InvalidDataException("Recipient field names must be unique ignoring case.");
+            var token = "«" + pair.Key + "»";
+            var replacement = pair.Value.Replace("\r\n", "\u2028").Replace('\n', '\u2028').Replace('\r', '\u2028');
+            foreach (var entry in index.Paragraphs)
             {
-                var token = "«" + pair.Key + "»"; var at = 0;
-                while ((at = text.IndexOf(token, at, StringComparison.OrdinalIgnoreCase)) >= 0) { replacements.Add((at, token.Length, pair.Value.Replace("\r\n", "\u2028").Replace('\n', '\u2028').Replace('\r', '\u2028'))); at += token.Length; }
+                var text = entry.Paragraph.Text; var at = 0;
+                while ((at = text.IndexOf(token, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+                {
+                    plans.Add((entry.Paragraph, at, entry.Start + at, token.Length, replacement));
+                    at += token.Length;
+                }
             }
-            foreach (var replacement in replacements.OrderByDescending(r => r.Start))
+        }
+        foreach (var change in plans.OrderByDescending(p => p.Global))
+        {
+            var paragraph = change.Paragraph; var start = change.Global; var end = start + change.Length; var inserted = change.Text.Length;
+            int Map(int position, bool right) => position < start ? position : position > end ? position + inserted - change.Length : start + (right ? inserted : 0);
+            var style = paragraph.StyleAt(change.Local);
+            paragraph.Runs = [.. paragraph.Slice(0, change.Local), new(change.Text, style), .. paragraph.Slice(change.Local + change.Length, paragraph.Length - change.Local - change.Length)];
+            paragraph.Normalize();
+            foreach (var bookmark in result.Bookmarks)
             {
-                var style = paragraph.StyleAt(replacement.Start); var before = paragraph.Slice(0, replacement.Start); var after = paragraph.Slice(replacement.Start + replacement.Length, paragraph.Length - replacement.Start - replacement.Length);
-                paragraph.Runs = [.. before, new(replacement.Text, style), .. after]; paragraph.Normalize();
+                var point = bookmark.Start == bookmark.End;
+                bookmark.Start = Map(bookmark.Start, point);
+                bookmark.End = point ? bookmark.Start : Math.Max(bookmark.Start, Map(bookmark.End, true));
             }
+            foreach (var field in result.Fields.ToArray())
+            {
+                if (start < field.End && end > field.Start) result.Fields.Remove(field); // Modified cached result becomes ordinary text.
+                else if (field.Start >= end) { field.Start += inserted - change.Length; field.End += inserted - change.Length; }
+            }
+        }
+        var updated = new TextIndex(result);
+        foreach (var bookmark in result.Bookmarks)
+        {
+            var point = bookmark.Start == bookmark.End;
+            bookmark.Start = updated.Snap(bookmark.Start, point);
+            bookmark.End = point ? bookmark.Start : updated.Snap(bookmark.End, true);
         }
         result.Comments.Clear(); result.Changes.Clear(); result.Id = Guid.NewGuid().ToString("N"); result.Modified = DateTimeOffset.UtcNow; DocumentJson.Validate(result); return result;
     }

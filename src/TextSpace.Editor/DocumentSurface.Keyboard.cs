@@ -15,7 +15,7 @@ public sealed partial class DocumentSurface
             or VirtualKey.Left or VirtualKey.Right or VirtualKey.Back or VirtualKey.Delete
         : key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right
             or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown
-            or VirtualKey.Back or VirtualKey.Delete or VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Escape;
+            or VirtualKey.Back or VirtualKey.Delete or VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Escape or VirtualKey.F9;
 
     private void FinishInputCommand()
     {
@@ -77,9 +77,10 @@ public sealed partial class DocumentSurface
             }
             switch (e.Key)
             {
+                case VirtualKey.F9: CommandRequested?.Invoke("update-fields"); break;
                 case VirtualKey.Up:
                 case VirtualKey.Down:
-                    var caret = Layout.Caret(position); _desiredX ??= caret.X;
+                    var caret = Layout.Caret(position); _desiredX ??= caret.X + Layout.PageLeft(caret.PageIndex);
                     Move(Layout.VerticalMove(position, (e.Key == VirtualKey.Up ? -1 : 1) * caret.Height, _desiredX)); break;
                 case VirtualKey.Left: _desiredX = null; Move(!shift && !Session.Selection.IsEmpty ? Session.Selection.Start : index.Previous(position)); break;
                 case VirtualKey.Right: _desiredX = null; Move(!shift && !Session.Selection.IsEmpty ? Session.Selection.End : index.Next(position)); break;

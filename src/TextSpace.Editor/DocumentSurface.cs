@@ -155,7 +155,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         var point = e.GetCurrentPoint(_canvas); _lastPointer = point.Position;
         if (point.Properties.IsRightButtonPressed) { if (Session.Selection.IsEmpty) { var at = HitTest(point.Position); Session.SetSelection(at, at); } ContextRequested?.Invoke(point.Position); e.Handled = true; return; }
         if (!point.Properties.IsLeftButtonPressed && point.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch) return;
-        SelectedImageId = null; var documentY = (point.Position.Y - 18 + _scrollY) / Scale; var pageIndex = Math.Clamp((int)(documentY / (Layout.Settings.Height + DocumentLayout.PageGap)), 0, Layout.Pages.Count - 1); var paperX = (point.Position.X - PaperLeft) / Scale; var paperY = documentY - Layout.PageTop(pageIndex);
+        SelectedImageId = null; var documentY = (point.Position.Y - 18 + _scrollY) / Scale; var pageIndex = Layout.PageAtY(documentY); var paperX = (point.Position.X - PaperLeft) / Scale - Layout.PageLeft(pageIndex); var paperY = documentY - Layout.PageTop(pageIndex);
         var image = Layout.Pages[pageIndex].Images.LastOrDefault(i => i.Bounds.Contains(paperX, paperY));
         if (image is not null) { SelectedImageId = image.Image.Id; Invalidate(); ViewChanged?.Invoke(); CommandRequested?.Invoke("picture-selected"); e.Handled = true; return; }
         var position = HitTest(point.Position); _anchor = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift) ? Session.Selection.Anchor : position;
@@ -169,14 +169,16 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     private void Draw(SKCanvas canvas, Size area)
     {
-        canvas.Clear(SKColor.Parse("#E8E8E8")); var left = PaperLeft; var pageHeight = Layout.Settings.Height * Scale; using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 24), IsAntialias = true }; using var border = new SKPaint { Color = SKColor.Parse("#C4C4C4"), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
+        canvas.Clear(SKColor.Parse("#E8E8E8")); var paperLeft = PaperLeft; using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 24), IsAntialias = true }; using var border = new SKPaint { Color = SKColor.Parse("#C4C4C4"), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
         for (var i = 0; i < Layout.Pages.Count; i++)
         {
+            var left = paperLeft + Layout.PageLeft(i) * Scale;
+            var pageHeight = Layout.Pages[i].Settings.Height * Scale; var pageWidth = Layout.Pages[i].Settings.Width * Scale;
             var top = 18 + Layout.PageTop(i) * Scale - _scrollY; if (top > area.Height || top + pageHeight < 0) continue;
-            canvas.DrawRect((float)left + 2, (float)top + 3, (float)(Layout.Width * Scale), (float)pageHeight, shadow);
+            canvas.DrawRect((float)left + 2, (float)top + 3, (float)pageWidth, (float)pageHeight, shadow);
             canvas.Save(); canvas.Translate((float)left, (float)top); canvas.Scale((float)Scale);
             Renderer.DrawPage(canvas, Session.Document, Layout, i, new() { Selection = Session.Selection, DrawCaret = _caretVisible && !Session.IsReadOnly && SelectedImageId is null, ShowFormatting = ShowFormatting, ShowComments = ShowComments, ShowChanges = ShowChanges, ShowBoundaries = ShowBoundaries, SelectedImageId = SelectedImageId }); canvas.Restore();
-            canvas.DrawRect((float)left, (float)top, (float)(Layout.Width * Scale), (float)pageHeight, border);
+            canvas.DrawRect((float)left, (float)top, (float)pageWidth, (float)pageHeight, border);
         }
     }
     private void ClampScroll()
@@ -196,22 +198,23 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         ClampScroll(); UpdateRuler(); UpdateInputPosition(); Invalidate(); ViewChanged?.Invoke();
     }
     public void FitPageWidth() => SetZoom((_canvas.ActualWidth - 68) / (Layout.Width * 4d / 3));
-    public void FitWholePage() => SetZoom(Math.Min((_canvas.ActualWidth - 68) / (Layout.Width * 4d / 3), (_canvas.ActualHeight - 36) / (Layout.Settings.Height * 4d / 3)));
+    public void FitWholePage() => SetZoom(Math.Min((_canvas.ActualWidth - 68) / (Layout.Width * 4d / 3), (_canvas.ActualHeight - 36) / (Layout.Pages[Layout.Caret(Session.Selection.Active).PageIndex].Settings.Height * 4d / 3)));
     public void ScrollToPage(int pageIndex) => SetScroll(_scrollX, Layout.PageTop(Math.Clamp(pageIndex, 0, Layout.Pages.Count - 1)) * Scale);
     public void EnsureCaretVisible()
     {
         if (_canvas.ActualHeight < 1) return; var caret = Layout.Caret(Session.Selection.Active); var top = 18 + (Layout.PageTop(caret.PageIndex) + caret.Y) * Scale; var bottom = top + caret.Height * Scale;
         if (top < _scrollY + 12) _scrollY = Math.Max(0, top - 24); else if (bottom > _scrollY + _canvas.ActualHeight - 12) _scrollY = bottom - _canvas.ActualHeight + 24;
-        var x = PaperLeft + caret.X * Scale; if (x < 28) _scrollX = Math.Max(0, _scrollX + x - 28); else if (x > _canvas.ActualWidth - 28) _scrollX += x - _canvas.ActualWidth + 28;
+        var x = PaperLeft + (Layout.PageLeft(caret.PageIndex) + caret.X) * Scale; if (x < 28) _scrollX = Math.Max(0, _scrollX + x - 28); else if (x > _canvas.ActualWidth - 28) _scrollX += x - _canvas.ActualWidth + 28;
         ClampScroll(); UpdateInputPosition();
     }
     private void UpdateRuler()
     {
-        _ruler.PageLeft = PaperLeft; _ruler.Page = Session.Document.Page; _ruler.Paragraph = Session.CurrentParagraph.Format; _ruler.Scale = Scale; _ruler.Typeface = Renderer.Metrics.Typeface(new()); _ruler.Invalidate();
+        var pageIndex = Layout.Caret(Session.Selection.Active).PageIndex;
+        _ruler.PageLeft = PaperLeft + Layout.PageLeft(pageIndex) * Scale; _ruler.Page = Layout.Pages[pageIndex].Settings; _ruler.Paragraph = Session.CurrentParagraph.Format; _ruler.Scale = Scale; _ruler.Typeface = Renderer.Metrics.Typeface(new()); _ruler.Invalidate();
     }
     private void UpdateInputPosition()
     {
-        var caret = Layout.Caret(Session.Selection.Active); var x = Math.Clamp(PaperLeft + caret.X * Scale, 0, Math.Max(0, _canvas.ActualWidth - 3)); var y = Math.Clamp(18 + (Layout.PageTop(caret.PageIndex) + caret.Y) * Scale - _scrollY, 0, Math.Max(0, _canvas.ActualHeight - 25));
+        var caret = Layout.Caret(Session.Selection.Active); var x = Math.Clamp(PaperLeft + (Layout.PageLeft(caret.PageIndex) + caret.X) * Scale, 0, Math.Max(0, _canvas.ActualWidth - 3)); var y = Math.Clamp(18 + (Layout.PageTop(caret.PageIndex) + caret.Y) * Scale - _scrollY, 0, Math.Max(0, _canvas.ActualHeight - 25));
         _input.RenderTransform = new TranslateTransform { X = x, Y = y };
     }
     private void Try(Action action) { try { action(); } catch (Exception ex) { Error?.Invoke(ex.Message); SyncInput(); } }

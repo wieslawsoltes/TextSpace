@@ -7,6 +7,8 @@ namespace TextSpace.Core;
 [JsonDerivedType(typeof(TableBlock), "table")]
 [JsonDerivedType(typeof(ImageBlock), "image")]
 [JsonDerivedType(typeof(PageBreakBlock), "pageBreak")]
+[JsonDerivedType(typeof(SectionBreakBlock), "sectionBreak")]
+[JsonDerivedType(typeof(ColumnBreakBlock), "columnBreak")]
 public abstract class Block
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");

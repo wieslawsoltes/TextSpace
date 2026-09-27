@@ -44,12 +44,12 @@ public sealed partial class WordWorkbench
         if (!await ShowDialogAsync(dialog)) return;
         if (!Enum.TryParse<TextSpace.Core.TextAlignment>(alignment.Value, true, out var a)) throw new InvalidOperationException("Choose a valid alignment.");
         var l = ParseNumber(left.Text); var r = ParseNumber(right.Text); var f = ParseNumber(first.Text); var b = ParseNumber(before.Text); var af = ParseNumber(after.Text); var spacing = ParseNumber(line.Value);
-        if (l < 0 || r < 0 || l + r > Session.Document.Page.ColumnWidth - 24 || b is < 0 or > 720 || af is < 0 or > 720 || spacing is < 0.5 or > 10 || f < -l || f > Session.Document.Page.ColumnWidth - l - r - 12) throw new InvalidOperationException("Paragraph geometry is outside the available page width or spacing limits.");
+        if (l < 0 || r < 0 || l + r > Session.CurrentSection.Page.ColumnWidth - 24 || b is < 0 or > 720 || af is < 0 or > 720 || spacing is < 0.5 or > 10 || f < -l || f > Session.CurrentSection.Page.ColumnWidth - l - r - 12) throw new InvalidOperationException("Paragraph geometry is outside the available page width or spacing limits.");
         Session.FormatParagraph("Paragraph", format => format with { Alignment = a, LeftIndent = l, RightIndent = r, FirstLineIndent = f, SpaceBefore = b, SpaceAfter = af, LineSpacing = spacing, KeepWithNext = keep.IsChecked, PageBreakBefore = page.IsChecked });
     }
     private async Task PageSetupDialogAsync()
     {
-        var page = Session.Document.Page; var dialog = new OfficeDialog("Page Setup", "Apply", 520); dialog.AddDescription("Measurements are in typographic points: 72 points = 1 inch. Settings apply to the whole document.");
+        var page = Session.CurrentSection.Page; var dialog = new OfficeDialog("Page Setup", "Apply", 520); dialog.AddDescription("Measurements are in typographic points: 72 points = 1 inch. Settings apply to the current section.");
         var width = dialog.AddField("Paper width", N(page.Width)); var height = dialog.AddField("Paper height", N(page.Height));
         var top = dialog.AddField("Top margin", N(page.MarginTop)); var bottom = dialog.AddField("Bottom margin", N(page.MarginBottom)); var left = dialog.AddField("Left margin", N(page.MarginLeft)); var right = dialog.AddField("Right margin", N(page.MarginRight));
         var columns = Choice(dialog, "Columns", ["1", "2", "3"], page.Columns.ToString()); var gap = dialog.AddField("Column gap", N(page.ColumnGap));
@@ -68,9 +68,9 @@ public sealed partial class WordWorkbench
     }
     private async Task HeaderFooterAsync(bool header)
     {
-        var dialog = new OfficeDialog(header ? "Header" : "Footer", "Apply"); var text = dialog.AddField(header ? "Header text" : "Footer text", header ? Session.Document.Header : Session.Document.Footer);
-        dialog.AddDescription("Use {PAGE} for the current page number and {NUMPAGES} for the total. This text repeats on every page.");
-        if (await ShowDialogAsync(dialog)) Session.Execute(header ? "Header" : "Footer", () => { if (header) Session.Document.Header = text.Text; else Session.Document.Footer = text.Text; });
+        var dialog = new OfficeDialog(header ? "Header" : "Footer", "Apply"); var text = dialog.AddField(header ? "Header text" : "Footer text", header ? Session.CurrentSection.Header ?? "" : Session.CurrentSection.Footer ?? "");
+        dialog.AddDescription("Use {PAGE} for the current page number and {NUMPAGES} for the total. This is the default text for the current section. Section Settings provides first/even-page variants and linking.");
+        if (await ShowDialogAsync(dialog)) Session.SetSection(section => header ? section with { Header = text.Text } : section with { Footer = text.Text });
     }
     private async Task DateDialogAsync()
     {
@@ -80,7 +80,7 @@ public sealed partial class WordWorkbench
     }
     private async Task WatermarkAsync()
     {
-        var dialog = new OfficeDialog("Printed Watermark", "Apply"); var text = dialog.AddField("Watermark text", Session.Document.Page.Watermark ?? "DRAFT"); dialog.AddDescription("Leave the field empty to remove the watermark. Watermarks are preserved in native files and PDF, not DOCX export.");
+        var dialog = new OfficeDialog("Printed Watermark", "Apply"); var text = dialog.AddField("Watermark text", Session.CurrentSection.Page.Watermark ?? "DRAFT"); dialog.AddDescription("Leave the field empty to remove the watermark. Watermarks are preserved in native files and PDF, not DOCX export.");
         if (await ShowDialogAsync(dialog)) Session.SetPage(p => p with { Watermark = string.IsNullOrWhiteSpace(text.Text) ? null : text.Text.Trim()[..Math.Min(80, text.Text.Trim().Length)] });
     }
     private async Task ZoomDialogAsync()
@@ -145,29 +145,15 @@ public sealed partial class WordWorkbench
     }
     private Task InsertContentsAsync(bool update)
     {
-        var headings = Session.Index.Paragraphs.Where(p => p.Paragraph.Format.OutlineLevel > 0).ToArray();
-        if (headings.Length == 0) throw new InvalidOperationException("Apply Heading 1, Heading 2 or Heading 3 to paragraphs before inserting a table of contents.");
-        var entries = headings.Select(h => new { Text = new string(' ', Math.Max(0, h.Paragraph.Format.OutlineLevel - 1) * 3) + h.Paragraph.Text + "    " + (Surface.Layout.Caret(h.Start).PageIndex + 1), Level = h.Paragraph.Format.OutlineLevel }).ToArray();
-        var text = "Contents\n" + string.Join("\n", entries.Select(e => e.Text)) + "\n";
-        var existing = Session.Index.Paragraphs.Where(p => p.Paragraph.Format.StyleName.StartsWith("TOC", StringComparison.Ordinal)).ToArray();
-        if (update && existing.Length > 0) Session.SetSelection(existing[0].Start, Math.Min(Session.Index.Length, existing[^1].End + 1));
-        var start = Session.Selection.Start;
-        Session.Execute(update ? "Update table of contents" : "Insert table of contents", () =>
-        {
-            Session.InsertText(text);
-            var paragraphs = Session.Index.Paragraphs.Where(p => p.Start >= start && p.Start < start + text.Length).ToArray();
-            for (var i = 0; i < paragraphs.Length; i++)
-            {
-                var p = paragraphs[i].Paragraph; p.Format = new() { StyleName = i == 0 ? "TOCHeading" : "TOC" + entries[Math.Min(i - 1, entries.Length - 1)].Level, SpaceAfter = i == 0 ? 10 : 4 };
-                foreach (var run in p.Runs) run.Style = new() { FontSize = i == 0 ? 20 : 11, Bold = i == 0, Color = i == 0 ? "#0F4761" : "#202020" };
-            }
-        });
-        Notify("Inserted editable contents text. Update Table refreshes the entries and page numbers."); return Task.CompletedTask;
+        var count = Session.InsertTableOfContents(update, CreateFieldContext);
+        Notify($"Generated {count} live contents entries. F9 updates text and pages; Update Table also rebuilds the heading list.");
+        return Task.CompletedTask;
     }
+
     private static readonly (string Label, string Id)[] SearchableCommands =
     [
         ("Open a document", "open"), ("New blank document", "new"), ("Save a complete copy", "save"), ("Export Word document", "export-docx"), ("Export PDF", "export-pdf"), ("Export HTML", "export-html"), ("Export plain text", "export-text"), ("Export current page as PNG", "export-png"), ("Print", "print"),
-        ("Find text", "find"), ("Replace text", "replace"), ("Font settings", "font-dialog"), ("Paragraph settings", "paragraph-dialog"), ("Page setup", "page-setup"), ("Insert picture", "insert-picture"), ("Insert hyperlink", "link"), ("Insert table of contents", "toc"), ("New comment", "new-comment"), ("Track changes", "track"), ("Word count", "word-count"), ("Focus mode", "focus"), ("Zoom to page width", "page-width"), ("Keyboard shortcuts", "shortcuts")
+        ("Section settings", "section-settings"), ("Insert a live field", "insert-field"), ("Update fields", "update-fields"), ("Manage fields", "manage-fields"), ("Insert cross-reference", "cross-reference"), ("Find text", "find"), ("Replace text", "replace"), ("Font settings", "font-dialog"), ("Paragraph settings", "paragraph-dialog"), ("Page setup", "page-setup"), ("Insert picture", "insert-picture"), ("Insert hyperlink", "link"), ("Insert table of contents", "toc"), ("New comment", "new-comment"), ("Track changes", "track"), ("Word count", "word-count"), ("Focus mode", "focus"), ("Zoom to page width", "page-width"), ("Keyboard shortcuts", "shortcuts")
     ];
     private async Task CommandSearchAsync()
     {
@@ -184,7 +170,7 @@ public sealed partial class WordWorkbench
     private async Task ShortcutsAsync()
     {
         var dialog = new OfficeDialog("Keyboard Shortcuts", "Close", 540);
-        foreach (var (label, keys) in new[] { ("Bold / Italic / Underline", "Ctrl+B / Ctrl+I / Ctrl+U"), ("Undo / Redo", "Ctrl+Z / Ctrl+Y"), ("Save / Open / New / Print", "Ctrl+S / Ctrl+O / Ctrl+N / Ctrl+P"), ("Find / Replace / Hyperlink", "Ctrl+F / Ctrl+H / Ctrl+K"), ("Select all", "Ctrl+A"), ("Align left / center / right / justify", "Ctrl+L / Ctrl+E / Ctrl+R / Ctrl+J"), ("Page break / Soft line break", "Ctrl+Enter / Shift+Enter"), ("Next / Previous table cell", "Tab / Shift+Tab"), ("Select text", "Shift + arrow keys"), ("Move by word", "Ctrl + Left/Right"), ("Zoom", "Ctrl + mouse wheel"), ("Leave focus mode", "Escape") }) dialog.Body.Children.Add(OfficeTheme.Columns((OfficeTheme.Text(label, 11), -1), (OfficeTheme.Text(keys, 11, OfficeTheme.Muted), 0)));
+        foreach (var (label, keys) in new[] { ("Bold / Italic / Underline", "Ctrl+B / Ctrl+I / Ctrl+U"), ("Undo / Redo", "Ctrl+Z / Ctrl+Y"), ("Save / Open / New / Print", "Ctrl+S / Ctrl+O / Ctrl+N / Ctrl+P"), ("Find / Replace / Hyperlink", "Ctrl+F / Ctrl+H / Ctrl+K"), ("Select all", "Ctrl+A"), ("Align left / center / right / justify", "Ctrl+L / Ctrl+E / Ctrl+R / Ctrl+J"), ("Page break / Soft line break", "Ctrl+Enter / Shift+Enter"), ("Next / Previous table cell", "Tab / Shift+Tab"), ("Select text", "Shift + arrow keys"), ("Move by word", "Ctrl + Left/Right"), ("Update live fields", "F9"), ("Zoom", "Ctrl + mouse wheel"), ("Leave focus mode", "Escape") }) dialog.Body.Children.Add(OfficeTheme.Columns((OfficeTheme.Text(label, 11), -1), (OfficeTheme.Text(keys, 11, OfficeTheme.Muted), 0)));
         dialog.AddDescription("On macOS, Command is also recognized for editor shortcuts. Browser-reserved shortcuts may require the document canvas to have focus."); await ShowDialogAsync(dialog);
     }
     private async Task HelpAsync()
@@ -199,7 +185,7 @@ public sealed partial class WordWorkbench
     {
         var dialog = new OfficeDialog("About TextSpace", "Close", 530);
         dialog.Body.Children.Add(OfficeTheme.Text("TextSpace", 30, OfficeTheme.Accent, true));
-        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.1.0-alpha.1.");
+        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.2.0-alpha.1.");
         dialog.AddDescription("Original office-style controls and reusable document libraries. Open-source font substitutes are included; Microsoft fonts and branding are not distributed.");
         dialog.AddDescription("TextSpace is not affiliated with Microsoft. Microsoft Word and Microsoft 365 are trademarks of Microsoft. Source code: MIT License.");
         dialog.AddDescription("Recovery storage: " + Host.StorageDescription + ". No document upload, account, analytics, or AI service is required."); await ShowDialogAsync(dialog);

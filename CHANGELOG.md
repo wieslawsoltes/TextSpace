@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-alpha.1 — Sections and fields
+
+- Added mixed-paper next/odd/even-page sections and explicit column breaks with nonprinting boundary markers.
+- Added current-section page setup, numbering restart/continuation and decimal/Roman/alphabetic display formats.
+- Added nullable inherited versus explicitly blank first/even/default header and footer variants, plain-text wrapping and page/section/metadata placeholders.
+- Added 17 supported live field types, bounded dependency and sequence evaluation, update/lock/unlink/edit UI, and F9.
+- Replaced static contents entries with live linked bookmark-text and page-reference fields, built as one undo unit.
+- Added schema-validated DOCX sections, story references, simple/complex single-paragraph fields, and cached-result preservation.
+- Updated variable-size scrolling, hit testing, ruler, previews, PDF, PNG, print CSS, HTML sections, and section-relative table/picture sizing.
+- Preserved unaffected live fields and remapped bookmarks during CSV mail merge.
+- Expanded engine regression and real-input browser acceptance coverage. See the workflow for results of the exact commit.
+
+## 0.1.0-alpha.1 — Publishing and editor reliability
 
 ### Added
 - Named points/ranges with create, move, rename, delete and navigation UI.

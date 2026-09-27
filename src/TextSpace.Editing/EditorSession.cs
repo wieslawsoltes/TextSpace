@@ -176,6 +176,7 @@ public sealed partial class EditorSession
     }
     private void TransformAnchors(int start, int removed, int inserted)
     {
+        TransformFieldAnchors(start, removed, inserted);
         var end = start + removed; var delta = inserted - removed;
         int Map(int position, bool right) => position < start ? position : position > end ? position + delta : start + (right ? inserted : 0);
         foreach (var comment in Document.Comments) { comment.Start = Map(comment.Start, false); comment.End = Math.Max(comment.Start, Map(comment.End, true)); }

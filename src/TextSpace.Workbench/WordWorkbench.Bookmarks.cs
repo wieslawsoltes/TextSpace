@@ -24,7 +24,9 @@ public sealed partial class WordWorkbench
             var x = (point.Position.X - Surface.PaperLeft) / Surface.Scale;
             var y = (point.Position.Y - (Surface.ShowRuler ? 25 : 0) - 18 + Surface.ScrollY) / Surface.Scale;
             var layout = Surface.Layout;
-            var pageIndex = (int)Math.Floor(y / (layout.Settings.Height + TextSpace.Layout.DocumentLayout.PageGap));
+            if (y < 0 || y >= layout.Height) return;
+            var pageIndex = layout.PageAtY(y);
+            x -= layout.PageLeft(pageIndex);
             if (pageIndex < 0 || pageIndex >= layout.Pages.Count) return;
             var localY = y - layout.PageTop(pageIndex);
             var line = layout.Pages[pageIndex].Lines.FirstOrDefault(l => localY >= l.Y && localY <= l.Y + l.Height && x >= l.X && x <= l.X + l.Width);

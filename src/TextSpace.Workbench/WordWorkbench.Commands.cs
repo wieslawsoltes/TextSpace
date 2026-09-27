@@ -57,6 +57,12 @@ public sealed partial class WordWorkbench
                 case "sort": await SortDialogAsync(); break;
                 case "font-dialog": await FontDialogAsync(); break;
                 case "paragraph-dialog": await ParagraphDialogAsync(); break;
+                case "section-settings": await SectionSettingsAsync(); break;
+                case "remove-section": Session.RemoveCurrentSectionBreak(); break;
+                case "insert-field": await InsertFieldAsync(); break;
+                case "manage-fields": await ManageFieldsAsync(); break;
+                case "cross-reference": await CrossReferenceAsync(); break;
+                case "update-fields": UpdateDocumentFields(); break;
                 case "page-setup": await PageSetupDialogAsync(); break;
                 case "new": await NewDocumentAsync(new DocumentModel()); break;
                 case "open": await OpenDocumentAsync(); break;
