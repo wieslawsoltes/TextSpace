@@ -1,0 +1,67 @@
+name: Input probe
+on:
+  push:
+    branches: [fix/pages-input]
+    paths: ['.github/workflows/input-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser
+          run-id: 36319574134
+          github-token: ${{ github.token }}
+          path: site
+      - run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Probe actual mouse, keyboard and native input
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 scripts/serve-site.py site --port 4173 > artifacts/http.log 2>&1 &
+          PID=$!; trap 'kill "$PID" || true' EXIT
+          cat > probe.mjs <<'JS'
+          import { chromium } from '@playwright/test';
+          import fs from 'node:fs/promises';
+          const browser=await chromium.launch({args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          const page=await browser.newPage({viewport:{width:1440,height:1000}});
+          await page.addInitScript(()=>{
+            globalThis.inputEvents=[];
+            for(const type of ['focusin','focusout','pointerdown','pointerup','mousedown','keydown','beforeinput','input']) document.addEventListener(type,e=>inputEvents.push({type,target:e.target.id,tag:e.target.tagName,active:document.activeElement?.id,key:e.key,data:e.data,inputType:e.inputType,value:e.target.value,prevented:e.defaultPrevented}),true);
+          });
+          const report={};
+          const snapshot=async label=>{
+            report[label]=await page.evaluate(()=>({state:__textSpaceState,active:document.activeElement?.outerHTML,events:inputEvents.splice(0),input:[...document.querySelectorAll('input,textarea')].map(e=>({html:e.outerHTML,value:e.value,start:e.selectionStart,end:e.selectionEnd})),selection:window.getSelection()?.toString()}));
+          };
+          const click=async name=>{
+            const c=await page.evaluate(name=>__textSpaceState.controls.find(c=>c.name===name||c.command===name),name);
+            await page.mouse.click(c.x+c.width/2,c.y+c.height/2);await page.waitForTimeout(500);
+          };
+          try {
+            await page.goto('http://127.0.0.1:4173/TextSpace/?test=1');
+            await page.waitForFunction(()=>globalThis.__textSpaceState?.ready,null,{timeout:120000});
+            await click('File tab');await click('Blank document template');await snapshot('new');
+            const c=(await page.evaluate(()=>__textSpaceState)).canvas;
+            await page.mouse.click(c.x+c.paperLeft+75*c.scale,c.y+18+75*c.scale-c.scrollY);await page.waitForTimeout(300);await snapshot('paperClick');
+            await page.keyboard.insertText('Hello TextSpace');await page.waitForTimeout(800);await snapshot('insertText');
+            await page.keyboard.type('abc',{delay:100});await page.waitForTimeout(500);await snapshot('keyTyping');
+            await click('Font family');await page.keyboard.press('Control+a');await page.keyboard.insertText('Carlito');await page.waitForTimeout(500);await snapshot('fontField');
+            await page.screenshot({path:'artifacts/input.png'});
+          } finally { await fs.writeFile('artifacts/input-probe.json',JSON.stringify(report,null,2)); await browser.close(); }
+          JS
+          node probe.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TextSpace-input-probe
+          path: artifacts
