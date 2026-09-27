@@ -16,7 +16,7 @@ public sealed partial class WordWorkbench
                 if (Session.TypingStyle.Hyperlink is { } target) await FollowHyperlinkAsync(target);
                 else Notify("Place the cursor inside a hyperlink first.", true);
             }, large: true)));
-        Surface.AddHandler(UIElement.PointerPressedEvent, new PointerRoutedEventHandler((sender, e) =>
+        Surface.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((sender, e) =>
         {
             if (!TextSpace.Editor.DocumentSurface.ControlDown()) return;
             var point = e.GetCurrentPoint(Surface);

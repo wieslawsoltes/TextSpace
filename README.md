@@ -10,51 +10,58 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 [![Pages](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml/badge.svg)](https://github.com/wieslawsoltes/TextSpace/actions/workflows/pages.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Browser deployment](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Compatibility](docs/COMPATIBILITY.md) · [Issues](https://github.com/wieslawsoltes/TextSpace/issues)
+[Open the browser app](https://wieslawsoltes.github.io/TextSpace/) · [Architecture](docs/ARCHITECTURE.md) · [Bookmarks](docs/BOOKMARKS.md) · [Publishing](docs/PUBLISHING.md) · [Compatibility](docs/COMPATIBILITY.md)
 
 </div>
 
 ---
 
-TextSpace is an independent, local-first word processor implemented in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its office-style ribbon, editing surface, navigation panes, review tools and file workflows are assembled from reusable libraries—not an embedded web editor or a screenshot of another application.
+TextSpace is an independent, local-first word processor implemented in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are assembled from reusable libraries—not an embedded web editor or a screenshot of another application.
 
-> **Development preview: 0.1.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. The Pages badge reports deployment status; a target link alone does not establish that deployment succeeded.
+> **Development preview: 0.1.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
 
 ## The workspace
 
-The custom ribbon groups commands into Home, Insert, Design, Layout, References, Mailings, Review, View and Help. Contextual table and picture tabs expose object-specific workflows. File backstage provides document templates, file operations and local version history.
+The custom ribbon groups commands into Home, Insert, Design, Layout, References, Mailings, Review, View and Help. Contextual table and picture tabs expose object-specific workflows. File backstage provides templates, file operations and local version history.
 
 | Area | Implemented scope |
 | :--- | :--- |
-| Editing | Rich runs, paragraph splitting/joining, grapheme-safe selection, formatting, atomic transactions and bounded undo/redo |
-| Typography | Font metadata, size, emphasis, super/subscript, colors, highlights, styles, paragraph spacing and alignment |
-| Layout | Paper dimensions, margins, breaks, columns, repeated header/footer text, page placeholders, rulers and previews |
-| Tables and pictures | Editable cells, row/column operations, shading, in-flow PNG/JPEG/GIF pictures, sizing and alternative text |
+| Editing | Rich runs, paragraph splitting/joining, grapheme-safe selection, atomic transactions, bounded undo/redo and native input integration |
+| Typography | Font metadata, size, emphasis, super/subscript, colors, highlighting, styles, paragraph spacing and alignment |
+| Layout | Paper dimensions, margins, page breaks, columns, repeated header/footer text, page placeholders, rulers and previews |
+| Tables and pictures | Editable cells, row/column insertion and deletion, shading, in-flow PNG/JPEG/GIF pictures, sizing and alternative text |
+| Navigation | Heading outline, page previews, search/replace, bookmarks, internal hyperlinks and safe external link navigation |
 | Review | Anchored comments/replies, resolved threads, local tracked-text edits and guarded rejection |
 | Files | Native `.textspace`, bounded DOCX interchange, PDF/PNG rendering, HTML/plain-text export |
-| Mail merge | CSV data, `«field»` substitution, preview and bounded DOCX batch export |
-| Recovery | Browser IndexedDB, atomic desktop files and bounded snapshot history |
+| Mail merge | CSV recipients, `«field»` substitution, preview and bounded DOCX batch export |
+| Recovery | Browser IndexedDB, atomic desktop files, bounded snapshot history and preservation of failed recovery bytes |
 
-The document itself is rendered by SkiaSharp. Edits go through a UI-independent session; Uno supplies the native text-input bridge. Unsupported commands are disabled. [Compatibility notes](docs/COMPATIBILITY.md) distinguish tested behavior from remaining advanced capabilities.
+The document is rendered by SkiaSharp. Edits pass through a UI-independent session; Uno supplies the native text-input bridge. Unsupported commands are disabled rather than showing simulated results.
+
+### Bookmarks and links
+
+Select a range and choose **Insert → Navigation → Bookmark**. Add, move, rename, delete, or navigate named ranges. Bookmarks follow text and table edits; undo restores their state. Renaming updates matching internal links atomically. Use an address such as `#TechnicalDetails` in the Link dialog, then **Open Link** or Control/Command-click the rendered link.
+
+Bookmarks are preserved in native files and exported as real WordprocessingML bookmark markers in DOCX. HTML output contains named targets, safe links, escaped font-family CSS, validated colors and a restrictive content-security policy. [Read the bookmark contract](docs/BOOKMARKS.md).
 
 ## Ten reusable libraries
 
 | Library | Responsibility |
 | :--- | :--- |
-| `TextSpace.Core` | Rich document model, typography, blocks, tables, images, review anchors and text indexing |
-| `TextSpace.Documents` | Native serialization/validation, templates, HTML output, CSV merge and offline writing checks |
-| `TextSpace.Editing` | Atomic editing, selections, rich formatting, structure, history and review |
+| `TextSpace.Core` | Rich document model, typography, blocks, tables, images, review/bookmark anchors and text indexing |
+| `TextSpace.Documents` | Native serialization/validation, templates, safe HTML output, CSV merge and offline writing checks |
+| `TextSpace.Editing` | Atomic editing, selections, rich formatting, structure, bounded history, bookmarks and review |
 | `TextSpace.Layout` | Renderer-independent line geometry, pagination, caret positioning and hit testing |
 | `TextSpace.Skia` | HarfBuzz metrics, font registration, page rendering, PDF and PNG output |
 | `TextSpace.OpenXml` | Bounded DOCX package import/export; Open XML SDK is a validation-only test dependency |
 | `TextSpace.Storage` | Recovery contracts and atomic-file implementation |
-| `TextSpace.Controls` | Ribbon, galleries, menus, icons, palettes, table picker, dialogs, panes and scrolling |
-| `TextSpace.Editor` | Embeddable paginated editor, ruler, input bridge and previews |
+| `TextSpace.Controls` | Extensible ribbon, galleries, menus, icons, palettes, dialogs, panes and scrolling |
+| `TextSpace.Editor` | Embeddable paginated editor, ruler, native input bridge and previews |
 | `TextSpace.Workbench` | Composable office shell, commands, backstage, navigation and review workflows |
 
-`TextSpace.App` contains browser and native desktop hosts. Packable projects are not automatically published NuGet packages.
+`TextSpace.App` contains browser and native desktop hosts. Successful Build runs attach ten NuGet packages under **TextSpace-packages**. Building packages does not automatically publish them to nuget.org.
 
-### Engine integration
+### Engine embedding
 
 ```csharp
 using TextSpace.Documents;
@@ -62,39 +69,39 @@ using TextSpace.Editing;
 using TextSpace.OpenXml;
 using TextSpace.Skia;
 
-var editor = new EditorSession(
-    DocumentJson.FromText("Hello TextSpace", "Example"),
-    maximumHistoryEntries: 100,
-    maximumHistoryBytes: 64L * 1024 * 1024);
-
-editor.SetSelection(0, 5);
-editor.ToggleBold();
-
-File.WriteAllText("Example.textspace", DocumentJson.Save(editor.Document));
-File.WriteAllBytes("Example.docx", new DocxWriter().Write(editor.Document));
+var document = DocumentJson.FromText("Introduction\nDetails", "Example");
+var editor = new EditorSession(document);
+editor.SetSelection(13, 20);
+editor.SetBookmark("Details");
+editor.SetSelection(0, 12);
+editor.FormatText("Link", style => style with
+{
+    Hyperlink = "#Details",
+    Underline = true
+});
+File.WriteAllBytes("Example.docx", new DocxWriter().Write(document));
 
 using var renderer = new DocumentRenderer();
-// Register your application's licensed typefaces before layout for consistent metrics.
-var layout = renderer.Layout(editor.Document);
-File.WriteAllBytes("Example.pdf", renderer.ExportPdf(editor.Document, layout));
+// Register the required font faces before layout for predictable typography.
+var layout = renderer.Layout(document);
+File.WriteAllBytes("Example.pdf", renderer.ExportPdf(document, layout));
 ```
 
-Undo, redo and rollback may replace the model instance: read `editor.Document` after mutations rather than retaining an earlier reference.
-
-### Uno integration
+### Uno embedding
 
 ```csharp
-var session = new TextSpace.Editing.EditorSession(document);
+var session = new EditorSession(document);
 var surface = new TextSpace.Editor.DocumentSurface(session);
-// Place surface in your Uno view and dispose it with its owning view.
-
 var workbench = new TextSpace.Workbench.WordWorkbench(session, workspaceHost);
-// IWorkspaceHost supplies your application's file, clipboard, print and recovery services.
 ```
+
+`IWorkspaceHost` supplies file picking/saving, clipboard, printing, URI launching and recovery. Dispose the surface or workbench when its owner closes. The UI libraries do not own your platform services.
+
+Ribbon hosts can insert their own lazy groups with `RibbonBar.InsertGroup(tabName, index, factory)`. Office button rest colors and foreground overrides are dependency properties, so XAML bindings and runtime updates refresh immediately.
 
 ## Build and run
 
-The repository pins **.NET SDK 10.0.401**, **Uno SDK 6.7.30** and the matching **SkiaSharp 3.119.2** rendering stack. Do not upgrade managed/native Skia independently. Python 3 acquires pinned open-font assets; Node.js 22+ runs browser acceptance.
+The repository pins .NET SDK **10.0.401** and Uno SDK **6.7.30** in `global.json`. The renderer uses Uno-compatible SkiaSharp **3.119.2**. Do not independently upgrade native Skia binaries without checking the selected Uno renderer's ABI.
 
 ```sh
 git clone https://github.com/wieslawsoltes/TextSpace.git
@@ -107,38 +114,46 @@ dotnet run --project src/TextSpace.App \
   -f net10.0-desktop -p:TextSpaceDesktopOnly=true
 ```
 
-For the browser:
+Browser publication:
 
 ```sh
-dotnet workload install wasm-tools --skip-manifest-update
-dotnet publish src/TextSpace.App -c Release -f net10.0-browserwasm \
-  -o artifacts/publish -p:WasmShellWebAppBasePath=/TextSpace/
+dotnet workload install wasm-tools
+dotnet publish src/TextSpace.App -f net10.0-browserwasm -c Release \
+  -p:WasmShellWebAppBasePath=/TextSpace/ -o artifacts/publish
 python3 scripts/collect-site.py artifacts/publish site
 python3 scripts/serve-site.py site --port 4173
 ```
 
-Open `http://127.0.0.1:4173/TextSpace/`. Use HTTP/HTTPS, not `file://`. In a second terminal:
+Open `http://127.0.0.1:4173/TextSpace/`. Browser builds require HTTP/HTTPS; opening `index.html` with `file://` is not supported.
 
-```sh
-npm install --no-audit --no-fund
-npx playwright install --with-deps chromium
-TEXTSPACE_BASE_URL=http://127.0.0.1:4173/TextSpace/ npm run test:browser
-```
+## Validation and delivery
 
-## Validation and deployment
+**Build** runs the engine suite, native desktop builds on Windows/Linux/macOS, real-input Chromium acceptance, and NuGet packaging. **Pages** deploys only a successful main-branch Build artifact after checking its source SHA, then repeats acceptance against the public URL. Runtime-module HTTP preflight rejects broken asset paths and HTML fallback responses.
 
-Build runs engine/interchange tests, compiles the native host on Linux, Windows and macOS, publishes the actual WebAssembly application, and exercises real mouse/keyboard editing in Chromium. The static acceptance server checks that served runtime bytes match the publication. Browser diagnostics are read-only and trimming-safe.
+Tests cover atomic notifications, rollback, bounded history, selection boundaries, table structural anchors, Unicode graphemes, bookmark transforms, DOCX schema validation and round-tripping, HTML link/CSS handling, and malicious XML rejection. Browser suites use actual mouse/keyboard events and read-only diagnostics, including explicit native-input readiness. Deliberate storage fault injection tests that failed recovery is not overwritten.
 
-Pages consumes only a successful, non-PR `main` Build, verifies source-commit provenance, deploys the browser artifact, and repeats acceptance against the public URL. Compilation or artifact upload alone is not deployment verification. Inspect the first failed step and captured browser console/request logs before retrying publication.
+The tagged **Release** workflow validates source, builds browser and NuGet artifacts, writes checksums, and creates a GitHub release. NuGet publication is an explicit workflow choice requiring the configured secret; neither a package build nor a workflow file claims a public NuGet release.
 
-Engine regression coverage includes Unicode graphemes and reversed selections, range validation, transaction rollback and observer ordering, memory-bounded history, read-only formatting, rich-run case conversion, table structure, review-anchor mapping, DOCX schema validation, malicious XML rejection and Skia exports.
+## Compatibility boundary
 
-## Privacy and licensing
+**Native `.textspace` is the complete editable format for TextSpace's model.** DOCX remains an interchange subset. Import limits compressed and expanded package sizes, disables XML DTDs, and never downloads external relationships.
 
-Documents are processed locally. TextSpace has no document-upload service, collaboration backend, account requirement or analytics integration. Runtime/font loading and hosting still involve ordinary network requests. External links open through explicit user actions.
+Word revision markup is normalized to visible text; local revision history is retained in native files but not exported as Word revisions. Multiple sections use one page-settings model, floating pictures become in-flow blocks, and merged/nested tables have simplified layout. Footnotes, endnotes, equations, advanced fields, floating shapes/text boxes, citation databases, embedded objects, collaboration, macros and add-ins remain outside the implemented scope.
 
-AutoSave is local recovery, not cloud synchronization. Quotas, cleared storage, denied permissions and abrupt termination can prevent recovery; keep downloaded `.textspace` copies.
+HarfBuzz shapes text, but exhaustive mixed-direction layout, complex-script caret behavior, IME combinations, screen-reader document semantics and exact Word line/page breaking remain unverified or incomplete. The offline Editor checks repetition, spacing and long sentences; it is not a full spelling or AI grammar service.
 
-Font acquisition uses pinned upstream revisions and retains original license files and SHA-256 manifests. Inter, Carlito, Tinos and Cousine supply UI/text faces and substitutions. Proprietary font-family names remain document metadata; substitutions do not guarantee Microsoft font metrics. No Microsoft font binaries, logos or application assets are redistributed.
+[Detailed compatibility ledger](docs/COMPATIBILITY.md) · [Publishing and input architecture](docs/PUBLISHING.md)
 
-Source: [MIT License](LICENSE). Third-party dependencies retain their own licenses. Microsoft Word and Microsoft 365 are trademarks of Microsoft. TextSpace is not affiliated with or endorsed by Microsoft.
+## Privacy, recovery and fonts
+
+Documents are processed locally. No account, analytics, document upload or AI service is required. AutoSave writes to this device, not cloud storage. Browser quotas or clearing can remove local data, and debounced keystrokes may not survive abrupt process termination. Download copies of important documents.
+
+Corrupt startup recovery is reported without replacing it with sample content. Recovery history is bounded and is not a substitute for a saved file.
+
+Font acquisition retrieves Inter, Carlito, Tinos and Cousine with their upstream license files and writes a source/SHA-256 manifest. Proprietary font names remain document metadata; open-source substitutes do not guarantee Aptos/Calibri metrics or Word pagination. Microsoft font files and branding assets are not redistributed.
+
+## License and contribution
+
+Source code: [MIT](LICENSE). Third-party dependencies and fonts retain their respective licenses. Report reproducible issues with the browser/OS, a minimal non-sensitive document, and the relevant build commit.
+
+Microsoft Word and Microsoft 365 are trademarks of Microsoft. TextSpace is not affiliated with or endorsed by Microsoft.
