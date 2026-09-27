@@ -1,0 +1,20 @@
+  Determining projects to restore...
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Layout/TextSpace.Layout.csproj (in 155 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Editing/TextSpace.Editing.csproj (in 155 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Core/TextSpace.Core.csproj (in 2 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.OpenXml/TextSpace.OpenXml.csproj (in 3 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Documents/TextSpace.Documents.csproj (in 2 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Skia/TextSpace.Skia.csproj (in 2.94 sec).
+  Restored /home/runner/work/TextSpace/TextSpace/tests/TextSpace.Tests/TextSpace.Tests.csproj (in 2.95 sec).
+  TextSpace.Core -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Core/bin/Release/net10.0/TextSpace.Core.dll
+  TextSpace.Layout -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Layout/bin/Release/net10.0/TextSpace.Layout.dll
+  TextSpace.Documents -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Documents/bin/Release/net10.0/TextSpace.Documents.dll
+  TextSpace.Editing -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Editing/bin/Release/net10.0/TextSpace.Editing.dll
+  TextSpace.Skia -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Skia/bin/Release/net10.0/TextSpace.Skia.dll
+  TextSpace.OpenXml -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.OpenXml/bin/Release/net10.0/TextSpace.OpenXml.dll
+  TextSpace.Tests -> /home/runner/work/TextSpace/TextSpace/tests/TextSpace.Tests/bin/Release/net10.0/TextSpace.Tests.dll
+Test run for /home/runner/work/TextSpace/TextSpace/tests/TextSpace.Tests/bin/Release/net10.0/TextSpace.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+Results File: /home/runner/work/_temp/textspace-report/engine.trx
+
+Passed!  - Failed:     0, Passed:    48, Skipped:     0, Total:    48, Duration: 916 ms - TextSpace.Tests.dll (net10.0)

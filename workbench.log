@@ -1,0 +1,35 @@
+  Determining projects to restore...
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Storage/TextSpace.Storage.csproj (in 283 ms).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Controls/TextSpace.Controls.csproj (in 4.68 sec).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj (in 4.57 sec).
+  Restored /home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/TextSpace.Workbench.csproj (in 4.57 sec).
+  6 of 10 projects are up-to-date for restore.
+  TextSpace.Core -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Core/bin/Release/net10.0/TextSpace.Core.dll
+  TextSpace.Controls -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Controls/bin/Release/net10.0-desktop/TextSpace.Controls.dll
+  TextSpace.Documents -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Documents/bin/Release/net10.0/TextSpace.Documents.dll
+  TextSpace.Layout -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Layout/bin/Release/net10.0/TextSpace.Layout.dll
+  TextSpace.Skia -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Skia/bin/Release/net10.0/TextSpace.Skia.dll
+  TextSpace.Editing -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Editing/bin/Release/net10.0/TextSpace.Editing.dll
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/PageRuler.cs(12,19): warning CS0108: 'PageRuler.Scale' hides inherited member 'UIElement.Scale'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(36,19): warning CS0108: 'DocumentSurface.Scale' hides inherited member 'UIElement.Scale'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(51,33): warning CS0108: 'DocumentSurface.ContextRequested' hides inherited member 'UIElement.ContextRequested'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(83,24): warning CS0108: 'DocumentSurface.KeyDown(VirtualKey)' hides inherited member 'UIElement.KeyDown'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(198,17): warning CS0108: 'DocumentSurface.Dispose()' hides inherited member 'FrameworkElement.Dispose()'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+  TextSpace.Editor -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/bin/Release/net10.0-desktop/TextSpace.Editor.dll
+  TextSpace.OpenXml -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.OpenXml/bin/Release/net10.0/TextSpace.OpenXml.dll
+  TextSpace.Storage -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Storage/bin/Release/net10.0/TextSpace.Storage.dll
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/WordWorkbench.cs(150,17): warning CS0108: 'WordWorkbench.Dispose()' hides inherited member 'FrameworkElement.Dispose()'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/TextSpace.Workbench.csproj::TargetFramework=net10.0-desktop]
+  TextSpace.Workbench -> /home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/bin/Release/net10.0-desktop/TextSpace.Workbench.dll
+
+Build succeeded.
+
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/PageRuler.cs(12,19): warning CS0108: 'PageRuler.Scale' hides inherited member 'UIElement.Scale'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(36,19): warning CS0108: 'DocumentSurface.Scale' hides inherited member 'UIElement.Scale'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(51,33): warning CS0108: 'DocumentSurface.ContextRequested' hides inherited member 'UIElement.ContextRequested'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(83,24): warning CS0108: 'DocumentSurface.KeyDown(VirtualKey)' hides inherited member 'UIElement.KeyDown'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/DocumentSurface.cs(198,17): warning CS0108: 'DocumentSurface.Dispose()' hides inherited member 'FrameworkElement.Dispose()'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Editor/TextSpace.Editor.csproj::TargetFramework=net10.0-desktop]
+/home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/WordWorkbench.cs(150,17): warning CS0108: 'WordWorkbench.Dispose()' hides inherited member 'FrameworkElement.Dispose()'. Use the new keyword if hiding was intended. [/home/runner/work/TextSpace/TextSpace/src/TextSpace.Workbench/TextSpace.Workbench.csproj::TargetFramework=net10.0-desktop]
+    6 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:16.42
