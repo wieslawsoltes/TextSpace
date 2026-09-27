@@ -1,0 +1,30 @@
+name: Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet build src/TextSpace.Editor/TextSpace.Editor.csproj -c Release -p:TextSpaceDesktopOnly=true
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: git archive --format=zip --output=/tmp/TextSpace-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-source
+          path: /tmp/TextSpace-source.zip
