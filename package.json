@@ -2,9 +2,7 @@
   "name": "textspace-acceptance",
   "private": true,
   "type": "module",
-  "scripts": {
-    "test:browser": "node scripts/browser-check.mjs && node scripts/document-feature-check.mjs"
-  },
+  "scripts": { "test:browser": "node scripts/run-browser-checks.mjs" },
   "devDependencies": { "@playwright/test": "1.63.0" },
   "engines": { "node": ">=22" }
 }
