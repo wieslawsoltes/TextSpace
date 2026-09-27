@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>Deterministic point-based pagination, line breaking, tables, columns and caret hit testing.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../TextSpace.Core/TextSpace.Core.csproj" /></ItemGroup></Project>

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>SkiaSharp and HarfBuzz text metrics, paginated rendering, selection painting and PDF/PNG export.</Description></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../TextSpace.Layout/TextSpace.Layout.csproj" /><PackageReference Include="SkiaSharp" Version="3.119.2" /><PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.2" /></ItemGroup>
+</Project>
