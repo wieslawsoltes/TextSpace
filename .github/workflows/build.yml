@@ -10,7 +10,7 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  controls:
+  workbench:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - run: dotnet build src/TextSpace.Editor/TextSpace.Editor.csproj -c Release -p:TextSpaceDesktopOnly=true
+      - run: dotnet build src/TextSpace.Workbench/TextSpace.Workbench.csproj -c Release -p:TextSpaceDesktopOnly=true
   source:
     runs-on: ubuntu-latest
     steps:
