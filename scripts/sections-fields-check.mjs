@@ -17,7 +17,7 @@ async function until(condition, message, timeout = 30000) {
   throw new Error(message);
 }
 async function find(name) {
-  return page.evaluate(name => globalThis.__textSpaceState?.controls.find(c => (c.name === name || c.command === name) && c.enabled && c.width > 0 && c.height > 0), name);
+  return page.evaluate(name => globalThis.__textSpaceState?.controls.findLast(c => (c.name === name || c.command === name) && c.enabled && c.width > 0 && c.height > 0), name);
 }
 async function click(name) {
   let c;
