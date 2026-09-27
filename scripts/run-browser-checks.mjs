@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-// Run each isolated scenario suite even when another fails, preserving all
-// diagnostic evidence without ever converting a test failure into success.
+// Preserve all diagnostics without ever converting a test failure into success.
 const suites = ['browser-check.mjs', 'keyboard-input-check.mjs', 'document-feature-check.mjs'];
 let failed = false;
 for (const suite of suites) {
-  const result = spawnSync(process.execPath, [new URL(suite, import.meta.url).pathname], {
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL(suite, import.meta.url))], {
     stdio: 'inherit', env: process.env, timeout: 10 * 60 * 1000
   });
   if (result.error || result.status !== 0) {
