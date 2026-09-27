@@ -1,4 +1,5 @@
 using TextSpace.Core;
+using TextSpace.Documents;
 
 namespace TextSpace.Editing;
 
@@ -31,6 +32,11 @@ public sealed partial class EditorSession
                 throw new InvalidOperationException("A bookmark with this name already exists.");
             var original = bookmark.Name;
             bookmark.Name = replacement;
+            foreach (var field in Document.Fields)
+            {
+                try { field.Instruction = FieldInstruction.Parse(field.Instruction).RenameTarget(original, replacement, field.Instruction); }
+                catch (FormatException) { /* Unsupported imported instructions remain inert and unchanged. */ }
+            }
             foreach (var run in Document.Paragraphs().SelectMany(p => p.Runs))
                 if (run.Style.Hyperlink is { } target && target.Equals("#" + original, StringComparison.OrdinalIgnoreCase))
                     run.Style = run.Style with { Hyperlink = "#" + replacement };

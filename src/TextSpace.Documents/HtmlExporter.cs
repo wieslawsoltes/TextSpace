@@ -112,13 +112,31 @@ public static class HtmlExporter
                     case ImageBlock image when image.ContentType is "image/png" or "image/jpeg" or "image/gif":
                         body.Append("<img alt=\"").Append(Esc(image.AltText)).Append("\" style=\"max-width:100%;width:").Append(N(image.Width)).Append("pt\" src=\"data:").Append(image.ContentType).Append(";base64,").Append(Convert.ToBase64String(image.Data)).Append("\">"); break;
                     case PageBreakBlock: body.Append("<div style=\"break-after:page\"></div>"); break;
+                    case ColumnBreakBlock: body.Append("<div style=\"break-after:column\"></div>"); break;
                 }
             }
         }
-        Blocks(document.Blocks);
+        var styles = new StringBuilder();
+        var sections = DocumentSections.Definitions(document); var number = 0; var blocks = new List<Block>();
+        void Section(SectionBreakKind? kind)
+        {
+            var page = sections[number].Page;
+            styles.Append("@page section").Append(number).Append("{size:").Append(N(page.Width)).Append("pt ").Append(N(page.Height)).Append("pt;margin:")
+                .Append(N(page.MarginTop)).Append("pt ").Append(N(page.MarginRight)).Append("pt ").Append(N(page.MarginBottom)).Append("pt ").Append(N(page.MarginLeft)).Append("pt}");
+            body.Append("<section style=\"page:section").Append(number).Append(";max-width:").Append(N(page.ContentWidth)).Append("pt;margin:0 auto;column-count:").Append(page.Columns).Append(";column-gap:").Append(N(page.ColumnGap)).Append("pt;");
+            if (kind is not null) body.Append("break-before:").Append(kind == SectionBreakKind.OddPage ? "right" : kind == SectionBreakKind.EvenPage ? "left" : "page").Append(';');
+            body.Append("\">"); Blocks(blocks); body.Append("</section>"); blocks.Clear(); number++;
+        }
+        SectionBreakKind? preceding = null;
+        foreach (var block in document.Blocks)
+        {
+            if (block is SectionBreakBlock boundary) { Section(preceding); preceding = boundary.Kind; }
+            else blocks.Add(block);
+        }
+        Section(preceding);
         var page = document.Page;
         return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\"><title>" + Esc(document.Title)
-            + "</title><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:40px auto;max-width:" + N(page.ContentWidth) + "pt;white-space:pre-wrap}table{border-collapse:collapse;width:100%;white-space:normal}td,th{border:1px solid #a8b7c8;vertical-align:top;font-weight:normal;text-align:left}td p,th p{margin:0}img{display:block;margin:12pt auto}@page{size:"
-            + N(page.Width) + "pt " + N(page.Height) + "pt;margin:" + N(page.MarginTop) + "pt " + N(page.MarginRight) + "pt " + N(page.MarginBottom) + "pt " + N(page.MarginLeft) + "pt}@media print{body{margin:0;max-width:none}}</style></head><body>" + body + "</body></html>";
+            + "</title><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:40px auto;max-width:" + N(sections.Max(s => s.Page.ContentWidth)) + "pt;white-space:pre-wrap}table{border-collapse:collapse;width:100%;white-space:normal}td,th{border:1px solid #a8b7c8;vertical-align:top;font-weight:normal;text-align:left}td p,th p{margin:0}img{display:block;margin:12pt auto}@page{size:"
+            + N(page.Width) + "pt " + N(page.Height) + "pt;margin:" + N(page.MarginTop) + "pt " + N(page.MarginRight) + "pt " + N(page.MarginBottom) + "pt " + N(page.MarginLeft) + "pt}" + styles + "@media print{body{margin:0;max-width:none}section{max-width:none!important}}</style></head><body>" + body + "</body></html>";
     }
 }

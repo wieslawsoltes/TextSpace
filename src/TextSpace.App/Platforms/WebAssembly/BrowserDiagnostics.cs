@@ -41,6 +41,26 @@ internal static partial class BrowserDiagnostics
                     json.WriteString("text", session.Document.PlainText);
                     json.WriteNumber("pages", surface.Layout.Pages.Count);
                     json.WriteNumber("words", session.Document.WordCount);
+                    json.WriteNumber("sections", TextSpace.Core.DocumentSections.Definitions(session.Document).Count);
+                    json.WriteNumber("currentSection", session.CurrentSectionIndex);
+                    json.WriteStartArray("pageGeometry");
+                    foreach (var item in surface.Layout.Pages)
+                    {
+                        json.WriteStartObject(); json.WriteNumber("width", item.Settings.Width); json.WriteNumber("height", item.Settings.Height);
+                        json.WriteNumber("top", surface.Layout.PageTop(item.Index)); json.WriteNumber("left", surface.Layout.PageLeft(item.Index));
+                        json.WriteNumber("section", item.SectionIndex); json.WriteNumber("number", item.PageNumber);
+                        json.WriteString("header", item.Header); json.WriteString("footer", item.Footer);
+                        json.WriteBoolean("blank", item.IsParityBlank); json.WriteEndObject();
+                    }
+                    json.WriteEndArray();
+                    json.WriteStartArray("fields");
+                    foreach (var field in session.Document.Fields)
+                    {
+                        json.WriteStartObject(); json.WriteString("id", field.Id); json.WriteString("code", field.Instruction);
+                        json.WriteNumber("start", field.Start); json.WriteNumber("end", field.End); json.WriteBoolean("locked", field.Locked);
+                        json.WriteString("value", session.Index.Text.Substring(field.Start, field.End - field.Start)); json.WriteEndObject();
+                    }
+                    json.WriteEndArray();
                     json.WriteNumber("paragraphs", session.Document.Paragraphs().Count());
                     json.WriteNumber("tables", session.Document.Blocks.OfType<TextSpace.Core.TableBlock>().Count());
                     json.WriteNumber("images", session.Document.Blocks.OfType<TextSpace.Core.ImageBlock>().Count());

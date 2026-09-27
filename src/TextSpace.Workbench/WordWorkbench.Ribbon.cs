@@ -155,7 +155,7 @@ public sealed partial class WordWorkbench
         yield return Group("Arrange", MenuButton("align-center", "Align", new OfficeMenu().Add("Left", () => AlignPicture(TextSpace.Core.TextAlignment.Left), "align-left").Add("Center", () => AlignPicture(TextSpace.Core.TextAlignment.Center), "align-center").Add("Right", () => AlignPicture(TextSpace.Core.TextAlignment.Right), "align-right")), Tool("delete", "Remove Picture", "delete-picture", true));
         yield return Group("Accessibility", Tool("document", "Alt Text", "picture-alt", true));
     }
-    private void SetFooter(string value) => RunEdit("Footer", () => Session.Execute("Footer", () => Session.Document.Footer = value));
+    private void SetFooter(string value) => RunEdit("Footer", () => Session.SetSection(section => section with { Footer = value }));
     private void SetMargins(double top, double right, double bottom, double left) => RunEdit("Margins", () => Session.SetPage(p => p with { MarginTop = top, MarginRight = right, MarginBottom = bottom, MarginLeft = left }));
     private void SetPageSize(double width, double height) => RunEdit("Page size", () => Session.SetPage(p => p with { Width = width, Height = height }));
     private void ApplyTheme(string color) => RunEdit("Document theme", () => Session.Execute("Document theme", () => { foreach (var p in Session.Document.Paragraphs().Where(p => p.Format.OutlineLevel > 0 || p.Format.StyleName == "Title")) { p.DefaultStyle = p.DefaultStyle with { Color = color }; foreach (var run in p.Runs) run.Style = run.Style with { Color = color }; } }));

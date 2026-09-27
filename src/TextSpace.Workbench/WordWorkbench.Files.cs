@@ -86,10 +86,16 @@ public sealed partial class WordWorkbench
     private async Task PrintAsync()
     {
         if (Surface.Layout.Pages.Count > 100) throw new InvalidOperationException("Browser print preview is limited to 100 pages. Export the document to PDF instead.");
-        var html = new StringBuilder("<!doctype html><html><head><meta charset=\"utf-8\"><title>" + System.Net.WebUtility.HtmlEncode(Session.Document.Title) + "</title><style>html,body{margin:0;padding:0}img{display:block;width:100%;break-after:page}img:last-child{break-after:auto}@page{size:" + Session.Document.Page.Width.ToString(System.Globalization.CultureInfo.InvariantCulture) + "pt " + Session.Document.Page.Height.ToString(System.Globalization.CultureInfo.InvariantCulture) + "pt;margin:0}</style></head><body>");
+        var html = new StringBuilder("<!doctype html><html><head><meta charset=\"utf-8\"><title>" + System.Net.WebUtility.HtmlEncode(Session.Document.Title) + "</title><style>html,body{margin:0;padding:0}img{display:block;width:100%;break-after:page}img:last-child{break-after:auto}");
         for (var i = 0; i < Surface.Layout.Pages.Count; i++)
         {
-            var png = Surface.Renderer.ExportPng(Session.Document, i, 1.5); html.Append("<img alt=\"Page ").Append(i + 1).Append("\" src=\"data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("\">");
+            var settings = Surface.Layout.Pages[i].Settings;
+            html.Append("@page sheet").Append(i).Append("{size:").Append(N(settings.Width)).Append("pt ").Append(N(settings.Height)).Append("pt;margin:0}.sheet").Append(i).Append("{page:sheet").Append(i).Append("}");
+        }
+        html.Append("</style></head><body>");
+        for (var i = 0; i < Surface.Layout.Pages.Count; i++)
+        {
+            var png = Surface.Renderer.ExportPng(Session.Document, i, 1.5); html.Append("<img class=\"sheet").Append(i).Append("\" alt=\"Page ").Append(i + 1).Append("\" src=\"data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("\">");
             if (html.Length > 80 * 1024 * 1024) throw new InvalidOperationException("Print preview exceeds the browser memory budget. Export to PDF instead.");
         }
         html.Append("</body></html>"); await Host.PrintHtmlAsync(html.ToString());

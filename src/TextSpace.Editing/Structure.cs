@@ -30,7 +30,7 @@ public sealed partial class EditorSession
         ArgumentNullException.ThrowIfNull(data);
         if (data.Length > 16 * 1024 * 1024) throw new InvalidOperationException("Pictures must be smaller than 16 MB.");
         if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
-        var ratio = Math.Min(1, Document.Page.ColumnWidth / width);
+        var ratio = Math.Min(1, CurrentSection.Page.ColumnWidth / width);
         InsertBlock(new ImageBlock { Data = data, ContentType = contentType, Width = width * ratio, Height = height * ratio, AltText = altText }, "Insert picture");
     }
     public TableBlock? CurrentTable => Index.At(Selection.Active).Table;

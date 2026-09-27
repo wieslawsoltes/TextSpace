@@ -64,40 +64,81 @@ public sealed class LayoutLine
 public sealed record LayoutCell(string TableId, RectD Bounds, string? Fill, bool Header);
 public sealed record LayoutImage(ImageBlock Image, RectD Bounds);
 
+public sealed record LayoutBreakMarker(string Label, double X, double Y, double Width);
+
 public sealed class LayoutPage(int index, PageSettings settings)
 {
     public int Index { get; } = index;
     public PageSettings Settings { get; } = settings;
+    public int SectionIndex { get; init; }
+    public int SectionPageIndex { get; init; }
+    public int SectionPageCount { get; set; }
+    public int PageNumber { get; init; } = index + 1;
+    public bool IsParityBlank { get; init; }
+    public SectionDefinition Section { get; init; } = new() { Page = settings };
+    public string Header => IsParityBlank ? "" : Section.Options.DifferentFirstPage && SectionPageIndex == 0 ? Section.Options.FirstHeader ?? ""
+        : Section.Options.DifferentOddAndEven && PageNumber % 2 == 0 ? Section.Options.EvenHeader ?? "" : Section.Header ?? "";
+    public string Footer => IsParityBlank ? "" : Section.Options.DifferentFirstPage && SectionPageIndex == 0 ? Section.Options.FirstFooter ?? ""
+        : Section.Options.DifferentOddAndEven && PageNumber % 2 == 0 ? Section.Options.EvenFooter ?? "" : Section.Footer ?? "";
     public List<LayoutLine> Lines { get; } = [];
     public List<LayoutCell> Cells { get; } = [];
     public List<LayoutImage> Images { get; } = [];
+    public List<LayoutBreakMarker> Breaks { get; } = [];
 }
 
 public readonly record struct CaretGeometry(int PageIndex, double X, double Y, double Height);
 
-public sealed class DocumentLayout(PageSettings settings, IReadOnlyList<LayoutPage> pages)
+/// <summary>Immutable page geometry index supporting mixed paper sizes and logarithmic page lookup.</summary>
+public sealed class DocumentLayout
 {
     public const double PageGap = 24;
-    public PageSettings Settings { get; } = settings;
-    public IReadOnlyList<LayoutPage> Pages { get; } = pages;
-    public double Width => Settings.Width;
-    public double Height => Pages.Count * (Settings.Height + PageGap) - PageGap;
-    public IEnumerable<LayoutLine> Lines => Pages.SelectMany(p => p.Lines);
-    public double PageTop(int index) => index * (Settings.Height + PageGap);
+    private readonly double[] _pageTops;
+    private readonly LayoutLine[] _lines;
+    public PageSettings Settings { get; }
+    public IReadOnlyList<LayoutPage> Pages { get; }
+    public double Width { get; }
+    public double Height { get; }
+    public IEnumerable<LayoutLine> Lines => _lines;
+
+    public DocumentLayout(PageSettings settings, IReadOnlyList<LayoutPage> pages)
+    {
+        if (pages.Count == 0) throw new ArgumentException("At least one page is required.", nameof(pages));
+        Settings = settings; Pages = pages; Width = pages.Max(p => p.Settings.Width);
+        _pageTops = new double[pages.Count]; var top = 0d;
+        for (var i = 0; i < pages.Count; i++) { _pageTops[i] = top; top += pages[i].Settings.Height + PageGap; }
+        Height = top - PageGap; _lines = pages.SelectMany(p => p.Lines).ToArray();
+    }
+    public double PageTop(int index) => _pageTops[Math.Clamp(index, 0, _pageTops.Length - 1)];
+    public double PageLeft(int index) => (Width - Pages[Math.Clamp(index, 0, Pages.Count - 1)].Settings.Width) / 2;
+    public int PageAtY(double documentY)
+    {
+        if (!double.IsFinite(documentY)) return 0;
+        var at = Array.BinarySearch(_pageTops, documentY);
+        return at >= 0 ? at : Math.Clamp(~at - 1, 0, Pages.Count - 1);
+    }
     public CaretGeometry Caret(int position)
     {
-        var line = Lines.LastOrDefault(l => position >= l.Start && position <= l.End) ?? Lines.LastOrDefault();
+        var line = _lines.LastOrDefault(l => position >= l.Start && position <= l.End) ?? _lines.LastOrDefault();
         return line is null ? new(0, Settings.MarginLeft, Settings.MarginTop, 14) : new(line.PageIndex, line.CaretX(position), line.Y, line.Height);
+    }
+    public FieldPageInfo FieldPageAt(int position)
+    {
+        var page = Pages[Caret(position).PageIndex];
+        return new(page.PageNumber, Pages.Count, page.SectionIndex + 1, page.SectionPageCount, page.Section.Options.NumberStyle);
     }
     public int HitTest(double x, double documentY)
     {
-        var pageIndex = Math.Clamp((int)(documentY / (Settings.Height + PageGap)), 0, Pages.Count - 1);
-        var y = documentY - PageTop(pageIndex); var page = Pages[pageIndex];
-        var line = page.Lines.OrderBy(l => (y < l.Y ? l.Y - y : y > l.Y + l.Height ? y - l.Y - l.Height : 0) * 10000 + (x < l.X ? l.X - x : x > l.X + l.Width ? x - l.X - l.Width : 0)).FirstOrDefault();
-        return line?.HitTest(x) ?? Lines.LastOrDefault()?.End ?? 0;
+        var pageIndex = PageAtY(documentY); var y = documentY - PageTop(pageIndex); var page = Pages[pageIndex];
+        x -= PageLeft(pageIndex);
+        var line = page.Lines.OrderBy(l => (y < l.Y ? l.Y - y : y > l.Y + l.Height ? y - l.Y - l.Height : 0) * 10000
+            + (x < l.X ? l.X - x : x > l.X + l.Width ? x - l.X - l.Width : 0)).FirstOrDefault();
+        if (line is not null) return line.HitTest(x);
+        // A deliberately blank parity page should not jump to the document's end.
+        return _lines.LastOrDefault(l => l.PageIndex < pageIndex)?.End ?? _lines.FirstOrDefault()?.Start ?? 0;
     }
     public int VerticalMove(int position, double deltaY, double? desiredX = null)
     {
-        var caret = Caret(position); return HitTest(desiredX ?? caret.X, PageTop(caret.PageIndex) + caret.Y + deltaY + caret.Height / 2);
+        var caret = Caret(position);
+        return HitTest(desiredX ?? caret.X + PageLeft(caret.PageIndex), PageTop(caret.PageIndex) + caret.Y + deltaY + caret.Height / 2);
     }
 }

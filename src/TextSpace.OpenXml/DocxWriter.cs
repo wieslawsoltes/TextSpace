@@ -28,20 +28,17 @@ public sealed partial class DocxWriter
         DocumentJson.Validate(document);
         _document = document; _index = new(document); _relationships.Clear(); _media.Clear(); _nextId = 0;
         Relate("styles", "styles.xml"); Relate("numbering", "numbering.xml"); Relate("settings", "settings.xml");
-        var headerId = string.IsNullOrEmpty(document.Header) ? null : Relate("header", "header1.xml");
-        var footerId = string.IsNullOrEmpty(document.Footer) ? null : Relate("footer", "footer1.xml");
+        _storyParts.Clear();
         if (document.Comments.Count > 0) Relate("comments", "comments.xml");
-        var body = E("body", Blocks(document.Blocks));
-        body.Add(Section(document.Page, headerId, footerId));
+        var body = WriteSectionBody(document);
         using var output = new MemoryStream();
         using (var zip = new ZipArchive(output, ZipArchiveMode.Create, true))
         {
             Add(zip, "word/document.xml", new(E("document", new XAttribute(XNamespace.Xmlns + "w", W), new XAttribute(XNamespace.Xmlns + "r", R), new XAttribute(XNamespace.Xmlns + "wp", Wp), new XAttribute(XNamespace.Xmlns + "a", A), new XAttribute(XNamespace.Xmlns + "pic", Pic), body)));
             Add(zip, "word/styles.xml", Styles());
             Add(zip, "word/numbering.xml", Numbering());
-            Add(zip, "word/settings.xml", new(E("settings", E("zoom", new XAttribute(W + "percent", 100)), E("defaultTabStop", V(720)), E("compat"))));
-            if (headerId is not null) Add(zip, "word/header1.xml", new(E("hdr", HeaderFooter(document.Header))));
-            if (footerId is not null) Add(zip, "word/footer1.xml", new(E("ftr", HeaderFooter(document.Footer, true))));
+            Add(zip, "word/settings.xml", new(E("settings", E("zoom", new XAttribute(W + "percent", 100)), E("defaultTabStop", V(720)), DocumentSections.Definitions(document).Any(s => s.Options.DifferentOddAndEven) ? E("evenAndOddHeaders") : null, E("compat"))));
+            foreach (var story in _storyParts) Add(zip, "word/" + story.Path, story.Xml);
             if (document.Comments.Count > 0) Add(zip, "word/comments.xml", Comments());
             Add(zip, "word/_rels/document.xml.rels", new(new XElement(Rel + "Relationships", _relationships)));
             foreach (var media in _media)
@@ -51,17 +48,10 @@ public sealed partial class DocxWriter
             }
             AddProperties(zip, document);
             Add(zip, "_rels/.rels", RootRelationships());
-            Add(zip, "[Content_Types].xml", ContentTypes(headerId is not null, footerId is not null));
+            Add(zip, "[Content_Types].xml", ContentTypes());
         }
         return output.ToArray();
     }
-
-    private static XElement Section(PageSettings page, string? headerId, string? footerId) => E("sectPr",
-        headerId is null ? null : E("headerReference", new XAttribute(W + "type", "default"), new XAttribute(R + "id", headerId)),
-        footerId is null ? null : E("footerReference", new XAttribute(W + "type", "default"), new XAttribute(R + "id", footerId)),
-        E("pgSz", new XAttribute(W + "w", Twips(page.Width)), new XAttribute(W + "h", Twips(page.Height)), page.Width > page.Height ? new XAttribute(W + "orient", "landscape") : null),
-        E("pgMar", new XAttribute(W + "top", Twips(page.MarginTop)), new XAttribute(W + "right", Twips(page.MarginRight)), new XAttribute(W + "bottom", Twips(page.MarginBottom)), new XAttribute(W + "left", Twips(page.MarginLeft)), new XAttribute(W + "header", Twips(page.HeaderDistance)), new XAttribute(W + "footer", Twips(page.FooterDistance)), new XAttribute(W + "gutter", 0)),
-        E("cols", new XAttribute(W + "num", page.Columns), new XAttribute(W + "space", Twips(page.ColumnGap))));
 
     private XDocument Comments()
     {
@@ -92,7 +82,7 @@ public sealed partial class DocxWriter
             new XElement(dct + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), document.Modified.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ")));
         Add(zip, "docProps/core.xml", new(properties));
         XNamespace ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
-        Add(zip, "docProps/app.xml", new(new XElement(ep + "Properties", new XElement(ep + "Application", "TextSpace"), new XElement(ep + "AppVersion", "0.1"))));
+        Add(zip, "docProps/app.xml", new(new XElement(ep + "Properties", new XElement(ep + "Application", "TextSpace"), new XElement(ep + "AppVersion", "0.2"))));
     }
 
     private static XDocument RootRelationships()
@@ -104,7 +94,7 @@ public sealed partial class DocxWriter
             Relationship("rId3", RelationshipType("extended-properties"), "docProps/app.xml")));
     }
 
-    private XDocument ContentTypes(bool header, bool footer)
+    private XDocument ContentTypes()
     {
         var types = new XElement(Ct + "Types",
             new XElement(Ct + "Default", new XAttribute("Extension", "rels"), new XAttribute("ContentType", "application/vnd.openxmlformats-package.relationships+xml")),
@@ -112,8 +102,7 @@ public sealed partial class DocxWriter
         void Override(string path, string type) => types.Add(new XElement(Ct + "Override", new XAttribute("PartName", "/" + path), new XAttribute("ContentType", type)));
         Override("word/document.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml");
         foreach (var part in new[] { "styles", "numbering", "settings" }) Override("word/" + part + ".xml", "application/vnd.openxmlformats-officedocument.wordprocessingml." + part + "+xml");
-        if (header) Override("word/header1.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
-        if (footer) Override("word/footer1.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
+        foreach (var story in _storyParts) Override("word/" + story.Path, "application/vnd.openxmlformats-officedocument.wordprocessingml." + story.Kind + "+xml");
         if (_document.Comments.Count > 0) Override("word/comments.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml");
         Override("docProps/core.xml", "application/vnd.openxmlformats-package.core-properties+xml");
         Override("docProps/app.xml", "application/vnd.openxmlformats-officedocument.extended-properties+xml");

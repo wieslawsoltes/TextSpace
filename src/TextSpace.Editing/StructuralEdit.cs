@@ -18,6 +18,7 @@ public sealed partial class EditorSession
             var oldIndex = Index;
             var addresses = oldIndex.Paragraphs.Select(a => new AddressSnapshot(a.Paragraph.Id, a.Start, a.End)).ToArray();
             var selection = Selection;
+            var fields = Document.Fields.Select(f => (Field: f, Start: f.Start, End: f.End, Text: oldIndex.Text.Substring(f.Start, f.End - f.Start))).ToArray();
             var bookmarks = Document.Bookmarks.Select(b => (Bookmark: b, Start: b.Start, End: b.End)).ToArray();
             var comments = Document.Comments.Select(c => (Comment: c, Start: c.Start, End: c.End)).ToArray();
             var changes = Document.Changes.Select(c => (Change: c, Start: c.Start, End: c.Start + c.Inserted.Length)).ToArray();
@@ -38,6 +39,13 @@ public sealed partial class EditorSession
                 for (var i = at - 1; i >= 0; i--)
                     if (surviving.TryGetValue(addresses[i].Id, out var before)) return before.End;
                 return 0;
+            }
+            foreach (var anchor in fields)
+            {
+                var start = Map(anchor.Start); var end = Map(anchor.End);
+                if (end <= start || end - start != anchor.Text.Length || !next.Text.AsSpan(start, end - start).SequenceEqual(anchor.Text)
+                    || !ReferenceEquals(next.At(start).Paragraph, next.At(end).Paragraph)) Document.Fields.Remove(anchor.Field);
+                else { anchor.Field.Start = start; anchor.Field.End = end; }
             }
             foreach (var anchor in comments)
             {

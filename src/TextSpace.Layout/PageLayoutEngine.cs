@@ -7,13 +7,26 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
 {
     public DocumentLayout Layout(DocumentModel document)
     {
-        var settings = document.Page; var index = new TextIndex(document); var layouter = new ParagraphLayouter(metrics);
-        var pages = new List<LayoutPage> { new(0, settings) }; var page = pages[0]; var column = 0; var y = settings.MarginTop; var number = 0;
+        var section = DocumentSections.Resolve(DocumentSections.First(document), null);
+        var settings = section.Page; var index = new TextIndex(document); var layouter = new ParagraphLayouter(metrics);
+        var pages = new List<LayoutPage>(); var sectionIndex = 0; var sectionPage = 0;
+        var pageNumber = section.Options.PageNumberStart ?? 1;
+        LayoutPage NewPage(bool parityBlank = false)
+        {
+            if (pages.Count >= 10_000) throw new InvalidOperationException("The document exceeds the pagination limit.");
+            var created = new LayoutPage(pages.Count, settings)
+            {
+                SectionIndex = sectionIndex, SectionPageIndex = sectionPage++, PageNumber = pageNumber++,
+                Section = section, IsParityBlank = parityBlank
+            };
+            pages.Add(created); return created;
+        }
+        var page = NewPage(); var column = 0; var y = settings.MarginTop; var number = 0;
         double Left() => settings.MarginLeft + column * (settings.ColumnWidth + settings.ColumnGap);
         void Next(bool forcePage = false)
         {
             if (!forcePage && column + 1 < settings.Columns) column++;
-            else { page = new(pages.Count, settings); pages.Add(page); column = 0; }
+            else { page = NewPage(); column = 0; }
             y = settings.MarginTop;
         }
         void Ensure(double height) { if (y + height > settings.Height - settings.MarginBottom && y > settings.MarginTop + 0.1) Next(); }
@@ -83,13 +96,25 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
             }
             y += 8;
         }
+        void BreakMarker(string label) => page.Breaks.Add(new(label, Left(), Math.Min(y, settings.Height - settings.MarginBottom), settings.ColumnWidth));
         foreach (var block in document.Blocks)
         {
             switch (block)
             {
                 case Paragraph p: Paragraph(p); break;
                 case TableBlock table: Table(table); break;
-                case PageBreakBlock: Next(true); break;
+                case PageBreakBlock: BreakMarker("Page Break"); Next(true); break;
+                case ColumnBreakBlock: BreakMarker("Column Break"); Next(); break;
+                case SectionBreakBlock boundary:
+                    BreakMarker("Section Break (" + boundary.Kind + ")");
+                    // Parity is physical (recto/verso), independent of a section's displayed numbering restart.
+                    var nextPhysicalNumber = pages.Count + 1;
+                    if (boundary.Kind == SectionBreakKind.OddPage && nextPhysicalNumber % 2 == 0
+                        || boundary.Kind == SectionBreakKind.EvenPage && nextPhysicalNumber % 2 != 0) NewPage(true);
+                    section = DocumentSections.Resolve(boundary.Section, section); settings = section.Page;
+                    sectionIndex++; sectionPage = 0; pageNumber = section.Options.PageNumberStart ?? pageNumber;
+                    page = NewPage(); column = 0; y = settings.MarginTop; number = 0;
+                    break;
                 case ImageBlock image:
                     var ratio = Math.Min(1, Math.Min(settings.ColumnWidth / image.Width, settings.ContentHeight / image.Height));
                     var width = image.Width * ratio; var height = image.Height * ratio; Ensure(height);
@@ -98,6 +123,8 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
             }
             if (pages.Count > 10_000) throw new InvalidOperationException("The document exceeds the pagination limit.");
         }
-        return new(settings, pages);
+        foreach (var group in pages.GroupBy(p => p.SectionIndex))
+            foreach (var member in group) member.SectionPageCount = group.Count();
+        return new(document.Page, pages);
     }
 }
