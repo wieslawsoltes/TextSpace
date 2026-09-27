@@ -1,0 +1,27 @@
+{
+  "label": "optimized",
+  "framework": ".NET 10.0.12",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "architecture": "X64",
+  "paragraphs": 1000,
+  "pages": 59,
+  "characters": 127889,
+  "measurement": {
+    "warmLayout1000Paragraphs": {
+      "medianMs": 19.0995,
+      "medianAllocatedBytes": 10042872,
+      "iterations": 10
+    },
+    "caret20000Queries": {
+      "medianMs": 14.9334,
+      "medianAllocatedBytes": 40,
+      "iterations": 7
+    },
+    "hitTest2000Queries": {
+      "medianMs": 12.708,
+      "medianAllocatedBytes": 128040,
+      "iterations": 7
+    }
+  },
+  "checksum": 744632853.8085938
+}
