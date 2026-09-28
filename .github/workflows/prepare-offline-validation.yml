@@ -1,0 +1,38 @@
+name: Prepare offline engine validation
+on:
+  push:
+    branches: [feat/field-expressions-performance]
+    paths: ['.github/workflows/prepare-offline-validation.yml']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Validate baseline and collect public SDK dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet test tests/TextSpace.Tests -c Release
+          mkdir -p /tmp/textspace-validation/feed
+          python3 - <<'PY'
+          import pathlib,shutil
+          for package in pathlib.Path.home().joinpath('.nuget/packages').rglob('*.nupkg'):
+              shutil.copy2(package,pathlib.Path('/tmp/textspace-validation/feed')/package.name)
+          PY
+          ROOT=$(dirname "$(readlink -f "$(command -v dotnet)")")
+          tar -C "$ROOT" -czf /tmp/textspace-validation/sdk.tar.gz dotnet host/fxr/10.0.12 shared/Microsoft.NETCore.App/10.0.12 sdk/10.0.401 packs/Microsoft.NETCore.App.Ref/10.0.12 packs/Microsoft.NETCore.App.Host.linux-x64/10.0.12
+          (cd /tmp/textspace-validation && sha256sum sdk.tar.gz feed/* > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TextSpace-offline-engine-tools
+          path: /tmp/textspace-validation
+          compression-level: 0
+          retention-days: 1
