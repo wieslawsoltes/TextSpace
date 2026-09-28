@@ -8,6 +8,10 @@ permissions:
   actions: read
 jobs:
   inspect:
+    strategy:
+      fail-fast: false
+      matrix:
+        experiment: [prearmed, show-picker]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,67 +24,54 @@ jobs:
           node-version: '22'
       - uses: actions/download-artifact@v4
         with:
-          name: TextSpace-browser-validation
-          path: prior-report
-          run-id: 36404437933
-          github-token: ${{ github.token }}
-      - name: Inspect the actual failing report
-        run: |
-          python3 - <<'PY'
-          import json,pathlib
-          for path in pathlib.Path('prior-report').rglob('report.json'):
-              if path.parent.name != 'typography': continue
-              report=json.loads(path.read_text())
-              print('REPORT',path)
-              print(json.dumps({k:report.get(k) for k in ('checks','failure','input','errors')},indent=2))
-              state=report.get('state') or {}
-              print('STATE',json.dumps({k:state.get(k) for k in ('title','text','status','dialog','selection','canvas')},indent=2))
-          PY
-      - uses: actions/download-artifact@v4
-        with:
           name: TextSpace-browser
           path: site
           run-id: 36404437933
           github-token: ${{ github.token }}
-      - name: Attach observation-only native input trace
+      - name: Configure diagnostic experiment
+        env:
+          EXPERIMENT: ${{ matrix.experiment }}
         run: |
           python3 - <<'PY'
+          import os
           from pathlib import Path
+          experiment=os.environ['EXPERIMENT']
           path=Path('scripts/typography-check.mjs')
           text=path.read_text()
+          marker='const state = () => page.evaluate(() => globalThis.__textSpaceState);'
+          assert text.count(marker)==1
           probe='''
           await page.addInitScript(() => {
             const trace = [];
             globalThis.__fileInputTrace = trace;
-            function record(kind, event = {}) {
-              const target = event.target;
-              trace.push({kind, time: performance.now(), key: event.key, ctrl: event.ctrlKey,
-                meta: event.metaKey, prevented: event.defaultPrevented, trusted: event.isTrusted,
-                target: target?.id || target?.tagName, type: target?.type,
-                active: document.activeElement?.id, focused: document.hasFocus(),
-                activated: navigator.userActivation?.isActive,
-                dialog: globalThis.__textSpaceState?.dialog,
-                status: globalThis.__textSpaceState?.status});
-              if (trace.length > 100) trace.shift();
-            }
-            for (const type of ['keydown','keyup','pointerdown','focusin','focusout'])
-              document.addEventListener(type, event => record(type,event), true);
-            document.addEventListener('click', event => { if(event.target?.type === 'file') record('file-click',event); }, true);
-            new MutationObserver(records => {
-              for (const change of records) for (const node of change.addedNodes)
-                if (node.nodeType === 1 && node.matches?.('input[type=file]')) record('file-added',{target:node});
-            }).observe(document, {childList:true,subtree:true});
+            for (const type of ['keydown','keyup','click','cancel','change'])
+              document.addEventListener(type, event => {
+                if (event.target?.type !== 'file' && !['Control','o'].includes(event.key)) return;
+                trace.push({type, key:event.key, ctrl:event.ctrlKey, target:event.target?.id || event.target?.type,
+                  activated:navigator.userActivation?.isActive, prevented:event.defaultPrevented, time:performance.now()});
+              },true);
           });
           '''
-          marker='const state = () => page.evaluate(() => globalThis.__textSpaceState);'
-          assert text.count(marker)==1
+          if experiment=='prearmed':
+              probe="page.on('filechooser', () => console.log('PERSISTENT FILECHOOSER OBSERVED'));\n"+probe
           text=text.replace(marker,probe+'\n'+marker)
           marker="report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;"
           assert text.count(marker)==1
-          text=text.replace(marker,marker+"\n  console.log('INPUT TRACE', JSON.stringify(await page.evaluate(() => globalThis.__fileInputTrace)));\n  console.log('FAILURE STATE', JSON.stringify(await state().then(s => ({status:s.status,dialog:s.dialog,text:s.text,selection:s.selection}))));")
+          text=text.replace(marker,marker+"\n  console.log('PICKER TRACE',JSON.stringify(await page.evaluate(()=>globalThis.__fileInputTrace)));\n  console.log('INPUTS',JSON.stringify(await page.locator('input[type=file]').evaluateAll(items=>items.map(i=>({connected:i.isConnected,disabled:i.disabled,files:i.files?.length,accept:i.accept})))));\n")
           path.write_text(text)
+          if experiment=='show-picker':
+              changed=[]
+              for script in Path('site').rglob('*.js'):
+                  source=script.read_text(errors='replace')
+                  if 'TextSpaceHost' in source and 'input.click();' in source:
+                      source=source.replace('input.click();','input.showPicker();')
+                      script.write_text(source)
+                      changed.append(str(script))
+              assert len(changed)==1, 'Expected one application host script: '+str(changed)
+              print('DIAGNOSTIC ONLY: changed picker call in',changed)
+          print('Experiment:',experiment)
           PY
-      - name: Reproduce with original keyboard assertions
+      - name: Reproduce using the original keyboard and DOCX assertions
         run: |
           set -euo pipefail
           npm install --no-audit --no-fund
@@ -99,5 +90,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: TextSpace-input-diagnostics
+          name: TextSpace-input-diagnostics-${{ matrix.experiment }}
           path: test-results/typography
