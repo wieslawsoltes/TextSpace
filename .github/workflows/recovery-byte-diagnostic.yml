@@ -1,0 +1,34 @@
+name: Recovery byte diagnostics
+on:
+  push:
+    branches: [fix/recovery-tab-validation]
+    paths: [.github/workflows/recovery-byte-diagnostic.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser-validation
+          run-id: 36449604005
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Compare original and downloaded bytes without normalization
+        shell: python
+        run: |
+          import pathlib,hashlib,json
+          root=pathlib.Path('evidence')
+          for p in root.rglob('*.textspace'):
+              if 'recovery' not in p.parts: continue
+              b=p.read_bytes()
+              print('FILE',p,'BYTES',len(b),'SHA256',hashlib.sha256(b).hexdigest(),'PREFIX',b[:24].hex())
+          for p in root.rglob('report.json'):
+              if 'recovery' not in p.parts: continue
+              r=json.loads(p.read_text())
+              print('FAILURE',r.get('failure'))
+              print('STATE',json.dumps({k:r.get('state',{}).get(k) for k in ['title','status','dialog','selectedTab']},ensure_ascii=False))
+              print('CONTROLS',json.dumps([c for c in r.get('state',{}).get('controls',[]) if 'Download original' in c.get('name','')],ensure_ascii=False))
