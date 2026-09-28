@@ -29,12 +29,15 @@ internal static class ColumnBalancer
         }
         if (!terminated || paragraphs.Count == 0) return null;
         var groups = new List<double>(); var pending = 0d;
+        var measuredLines = 0; var totalHeight = 0d;
         foreach (var paragraph in paragraphs)
         {
             var lines = cache.Layout(paragraph, flow.Settings.ColumnWidth, index.StartOf(paragraph), document.DefaultTabStop);
-            if (groups.Count + lines.Count > 50_000) return null;
+            measuredLines += lines.Count;
+            if (measuredLines > 50_000) return null;
             for (var i = 0; i < lines.Count; i++)
             {
+                totalHeight += lines[i].Height;
                 pending += lines[i].Height;
                 if (i == 0) pending += Math.Max(0, paragraph.Format.SpaceBefore);
                 if (i == lines.Count - 1) pending += Math.Max(0, paragraph.Format.SpaceAfter);
@@ -43,6 +46,10 @@ internal static class ColumnBalancer
                     : paragraph.Format.KeepWithNext;
                 if (!join) { groups.Add(pending); pending = 0; }
             }
+            totalHeight += Math.Max(0, paragraph.Format.SpaceBefore) + Math.Max(0, paragraph.Format.SpaceAfter);
+            // Nonnegative content heights cannot fit once this lower bound exceeds
+            // all columns. Avoid measuring the rest of an already oversized band.
+            if (totalHeight > flow.Capacity * flow.Settings.Columns + 0.00001) return null;
         }
         if (pending > 0) groups.Add(pending);
         if (groups.Count == 0) return null;
