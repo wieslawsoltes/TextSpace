@@ -18,7 +18,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 
 TextSpace is an independent, local-first word processor implemented in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are assembled from reusable libraries—not an embedded web editor or a screenshot of another application.
 
-> **Development preview: 0.3.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
+> **Development preview: 0.4.0-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep file copies of important documents. See the compatibility ledger before using interchange formats.
 
 ## The workspace
 
@@ -30,7 +30,7 @@ The custom ribbon groups commands into Home, Insert, Design, Layout, References,
 | Typography | Font metadata, size, emphasis, super/subscript, colors, highlighting, styles, paragraph spacing and alignment; aligned tab stops and leaders; discretionary/nonbreaking hyphens |
 | Layout | Mixed-size sections, next/odd/even-page and column breaks, per-section numbering, linked first/even/default headers and footers; widow/orphan and keep-paragraph controls |
 | Fields and contents | Live metadata, dates, sequences, bookmark/page references, F9 update, field locks, and linked table-of-contents entries |
-| Tables and pictures | Editable cells, row/column insertion and deletion, shading, in-flow PNG/JPEG/GIF pictures, sizing and alternative text |
+| Tables and pictures | Rectangular merged cells, split-to-grid, nested tables, repeated headers, vertical alignment, row pagination, row/column edits, in-cell/in-flow pictures |
 | Navigation | Heading outline, page previews, search/replace, bookmarks, internal hyperlinks and safe external link navigation |
 | Review | Anchored comments/replies, resolved threads, local tracked-text edits and guarded rejection |
 | Files | Native `.textspace`, bounded DOCX interchange, PDF/PNG rendering, HTML/plain-text export |
@@ -60,6 +60,12 @@ Use **Layout → Section Break** to separate portrait, landscape, or differently
 Generated live contents now use right-aligned dot leaders, without inserting dot characters into the document text. **Insert → Special Characters** inserts tabs, nonbreaking spaces/hyphens, optional hyphens and zero-width break opportunities. Formatting boundaries inside words no longer create artificial line-break opportunities. Optional hyphens become visible only when used for a break. [Typography and interoperability details](docs/TYPOGRAPHY.md).
 
 The renderer now reuses bounded paragraph geometry and native shaped-text blobs, indexes caret intervals, and shares existing pagination with PNG export/printing. Benchmarks, raw results, invalidation rules, and remaining hot paths are documented in [Performance engineering](docs/PERFORMANCE.md). Engine microbenchmarks are not browser frame-rate guarantees.
+
+### Merged and nested tables
+
+**Table Layout → Merge Cells** merges a selected logical rectangle (or opens explicit row/column bounds). **Split Cell** restores the covered grid slots while retaining all content in the top-left cell. Editing and Tab navigation skip covered slots rather than duplicating their text. Row/column insertion and deletion adjust crossing spans and remap bookmarks, comments and live fields through surviving paragraph identities.
+
+**Nested Table**, **Vertical Align**, and **Row Options** expose recursive table editing, top/middle/bottom alignment, minimum row heights, row splitting and repeated first-header-row rendering. DOCX exports real `gridSpan`/`vMerge` cells; HTML exports actual row/column spans. [Table model, editing API, layout and normalization contract](docs/TABLES.md).
 
 ## Ten reusable libraries
 

@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><LangVersion>14</LangVersion>
-    <Version>0.3.0-alpha.1</Version><Authors>Wiesław Šoltés; TextSpace contributors</Authors>
+    <Version>0.4.0-alpha.1</Version><Authors>Wiesław Šoltés; TextSpace contributors</Authors>
     <Company>TextSpace</Company><Copyright>Copyright © 2026 TextSpace contributors</Copyright>
     <RepositoryUrl>https://github.com/wieslawsoltes/TextSpace</RepositoryUrl><RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/wieslawsoltes/TextSpace</PackageProjectUrl>

@@ -6,6 +6,7 @@ public sealed class TableBlock : Block
     public List<double> ColumnWidths { get; set; } = [];
     public bool HeaderRow { get; set; } = true;
     public bool BandedRows { get; set; } = true;
+    public bool RepeatHeaderRow { get; set; } = true;
     public string AccentColor { get; set; } = "#185ABD";
     public double CellPadding { get; set; } = 6;
     public static TableBlock Create(int rows, int columns)
@@ -24,11 +25,18 @@ public sealed class TableBlock : Block
 
 public sealed class TableRow
 {
+    public double MinimumHeight { get; set; }
+    public bool AllowSplit { get; set; } = true;
     public List<TableCell> Cells { get; set; } = [];
 }
 
+public enum CellVerticalAlignment { Top, Center, Bottom }
+
 public sealed class TableCell
 {
+    public int ColumnSpan { get; set; } = 1;
+    public int RowSpan { get; set; } = 1;
+    public CellVerticalAlignment VerticalAlignment { get; set; }
     public List<Block> Blocks { get; set; } = [new Paragraph()];
     public string? Shading { get; set; }
 }

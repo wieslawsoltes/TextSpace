@@ -29,3 +29,22 @@ dotnet run --project benchmarks/TextSpace.Performance -c Release -- --glyphs
 `performance-glyphs.json` compares the previous direct `DrawShapedText` path with warm cached drawing on the same CPU Skia surface: 1,000 draws / 100 unique runs, three warmups, seven measured iterations. Median 13.0663 → 5.5165 ms, allocated managed bytes 1,636,040 → 40 (stopwatch allocation). The cached runs account for an estimated 65,020 bytes. This isolates drawing; it is not an end-to-end browser benchmark. Raster tests compare cached and uncached shaping at fixed coordinates for Latin ligatures, combining marks and Arabic; that does not establish full bidirectional paragraph correctness.
 
 Font/shaper/measurement caches outside these two LRUs retain their earlier behavior. The payload budgets do not include all native driver allocations or guarantee total process memory usage. The richer line breaker performs additional work on cache misses; monitor cold layout separately from warm reuse.
+
+## Table editing and normalization
+
+Canonical `Paragraph.Normalize()` calls now retain the list/run identities and allocate nothing for already-normalized content. Noncanonical runs still remove empty strings and coalesce equal adjacent styles. TextRun and paragraph collections are mutable and must not be shared between independently editable document locations. Normalization is not a cloning API.
+
+Structural edits precompute surviving paragraph identities plus nearest before/after fallbacks, then binary-search original paragraph endpoints for each bookmark/comment/field/selection endpoint. This replaces an O(anchors × paragraphs) remapping scan with O(paragraphs + anchors × log paragraphs) mapping work. Validation, serialization and index reconstruction still have their own costs. Table page slices use vertical interval indexes to find relevant lines, pictures and cell frames; long overlapping cells can still require larger candidate scans.
+
+```sh
+dotnet run --project benchmarks/TextSpace.Performance -c Release -- --table-edit current
+```
+
+`performance-tables-before.json` and `performance-tables-after.json` were measured on the same Debian 13 Linux x64 host, .NET 10.0.12, three warmups and seven measurements. The baseline source is `84f095437abca971927cd05d370c085d4f1be630` (engine-equivalent to merged `b397a304f800529243776ea286ffb96da67f8c10`; intervening change fixes only browser-test focus). Copy the identical TableEditingBenchmark harness and Editing project reference into the baseline to reproduce the comparison.
+
+| Operation | Baseline median | New median | Managed bytes: baseline → new |
+| --- | ---: | ---: | ---: |
+| Normalize 4,000 already-canonical four-run paragraphs | 3.8148 ms | 0.6962 ms | 2,176,040 → 40 |
+| Insert a column and Undo, 100×16 table / 1,601 bookmarks | 140.3147 ms | 78.7507 ms | 22,595,784 → 23,172,504 |
+
+The table operation is faster in this sample but allocates about 2.6% more managed bytes because it now maintains validated merged-cell topology and richer native metadata. The remaining allocations are not hidden by the timing improvement. Results are observations with raw per-iteration data, not fixed performance promises. The 40-byte normalization result is the benchmark Stopwatch allocation. These are CPU engine measurements, not browser input latency or FPS measurements.

@@ -1,0 +1,59 @@
+{
+  "label": "baseline-84f0954",
+  "framework": ".NET 10.0.12",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "architecture": "X64",
+  "normalizationParagraphs": 4000,
+  "normalizationRunsPerParagraph": 4,
+  "tableRows": 100,
+  "tableColumns": 16,
+  "bookmarks": 1601,
+  "normalize": {
+    "medianMs": 3.8148,
+    "medianAllocatedBytes": 2176040,
+    "elapsedMs": [
+      3.8291,
+      3.8148,
+      3.6996,
+      3.7403,
+      3.3075,
+      4.3215,
+      4.2096
+    ],
+    "allocatedBytes": [
+      2176040,
+      2176040,
+      2176040,
+      2176040,
+      2176040,
+      2176040,
+      2176040
+    ],
+    "warmups": 3,
+    "measurements": 7
+  },
+  "insertColumnAndUndo": {
+    "medianMs": 140.3147,
+    "medianAllocatedBytes": 22595784,
+    "elapsedMs": [
+      135.5953,
+      250.2426,
+      155.9736,
+      167.8306,
+      140.3147,
+      140.0404,
+      135.8237
+    ],
+    "allocatedBytes": [
+      22984080,
+      22595248,
+      22596144,
+      22595760,
+      22595784,
+      22595528,
+      22603104
+    ],
+    "warmups": 3,
+    "measurements": 7
+  }
+}

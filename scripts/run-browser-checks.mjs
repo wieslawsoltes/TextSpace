@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 // Preserve all diagnostics without ever converting a test failure into success.
-const suites = ['browser-check.mjs', 'keyboard-input-check.mjs', 'document-feature-check.mjs', 'sections-fields-check.mjs', 'typography-check.mjs'];
+const suites = ['browser-check.mjs', 'keyboard-input-check.mjs', 'document-feature-check.mjs', 'sections-fields-check.mjs', 'typography-check.mjs', 'tables-check.mjs'];
 let failed = false;
 for (const suite of suites) {
   const result = spawnSync(process.execPath, [fileURLToPath(new URL(suite, import.meta.url))], {

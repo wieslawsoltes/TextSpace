@@ -96,14 +96,17 @@ public static class HtmlExporter
                         body.Append("</").Append(tag).Append('>'); break;
                     case TableBlock table:
                         Array.Clear(counters); body.Append("<table>");
+                        var grid = new TableGrid(table);
                         for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
                         {
                             body.Append("<tr>");
-                            foreach (var cell in table.Rows[rowIndex].Cells)
+                            foreach (var region in grid.Regions.Where(region => region.Row == rowIndex))
                             {
+                                var cell = region.Cell;
                                 var cellTag = table.HeaderRow && rowIndex == 0 ? "th" : "td";
                                 var fill = cell.Shading ?? (table.HeaderRow && rowIndex == 0 ? "#D9E5F5" : table.BandedRows && rowIndex % 2 == 0 ? "#F3F6FA" : "#FFFFFF");
-                                body.Append('<').Append(cellTag).Append(" style=\"padding:").Append(N(table.CellPadding)).Append("pt;background:").Append(Color(fill, "#FFFFFF")).Append("\">");
+                                body.Append('<').Append(cellTag).Append(" rowspan=\"").Append(region.RowSpan).Append("\" colspan=\"").Append(region.ColumnSpan)
+                                    .Append("\" style=\"vertical-align:").Append(cell.VerticalAlignment == CellVerticalAlignment.Center ? "middle" : cell.VerticalAlignment.ToString().ToLowerInvariant()).Append(";padding:").Append(N(table.CellPadding)).Append("pt;background:").Append(Color(fill, "#FFFFFF")).Append("\">");
                                 Blocks(cell.Blocks); body.Append("</").Append(cellTag).Append('>');
                             }
                             body.Append("</tr>");

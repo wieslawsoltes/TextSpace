@@ -36,7 +36,7 @@ def main():
     (args.output / 'build-info.json').write_text(json.dumps({
         'application': 'TextSpace', 'host': 'Uno WebAssembly',
         'commit': os.environ.get('GITHUB_SHA', 'local'),
-        'version': os.environ.get('VERSION', '0.3.0-alpha.1')
+        'version': os.environ.get('VERSION', '0.4.0-alpha.1')
     }, indent=2) + '\n')
     print('Collected', source, 'to', args.output, flush=True)
 

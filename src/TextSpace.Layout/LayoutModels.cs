@@ -41,6 +41,7 @@ public sealed class LayoutLine
     public int Start { get; init; }
     public int End { get; init; }
     public int PageIndex { get; set; }
+    public bool IsReplica { get; init; }
     public double X { get; set; }
     public double Y { get; set; }
     public double Width { get; set; }
@@ -80,7 +81,12 @@ public sealed class LayoutLine
     }
 }
 
-public sealed record LayoutCell(string TableId, RectD Bounds, string? Fill, bool Header);
+public sealed record LayoutCell(string TableId, RectD Bounds, string? Fill, bool Header)
+{
+    public bool DrawTop { get; init; } = true;
+    public bool DrawBottom { get; init; } = true;
+    public bool IsReplica { get; init; }
+}
 public sealed record LayoutImage(ImageBlock Image, RectD Bounds);
 
 public sealed record LayoutBreakMarker(string Label, double X, double Y, double Width);
@@ -125,7 +131,7 @@ public sealed partial class DocumentLayout
         Settings = settings; Pages = pages; Width = pages.Max(p => p.Settings.Width);
         _pageTops = new double[pages.Count]; var top = 0d;
         for (var i = 0; i < pages.Count; i++) { _pageTops[i] = top; top += pages[i].Settings.Height + PageGap; }
-        Height = top - PageGap; _lines = pages.SelectMany(p => p.Lines).ToArray();
+        Height = top - PageGap; _lines = pages.SelectMany(p => p.Lines).Where(line => !line.IsReplica).ToArray();
         BuildTextLookup();
     }
     public double PageTop(int index) => _pageTops[Math.Clamp(index, 0, _pageTops.Length - 1)];

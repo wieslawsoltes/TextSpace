@@ -43,7 +43,12 @@ public sealed partial class DocumentRenderer : IDisposable
         foreach (var cell in page.Cells)
         {
             if (cell.Fill is not null) { paint.Color = Color(cell.Fill); canvas.DrawRect(Rect(cell.Bounds), paint); }
-            paint.Color = Color("#A8B7C8"); paint.Style = SKPaintStyle.Stroke; paint.StrokeWidth = 0.55f; canvas.DrawRect(Rect(cell.Bounds), paint); paint.Style = SKPaintStyle.Fill;
+            paint.Color = Color("#A8B7C8"); paint.Style = SKPaintStyle.Stroke; paint.StrokeWidth = 0.55f; var bounds = Rect(cell.Bounds);
+            canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, paint);
+            canvas.DrawLine(bounds.Right, bounds.Top, bounds.Right, bounds.Bottom, paint);
+            if (cell.DrawTop) canvas.DrawLine(bounds.Left, bounds.Top, bounds.Right, bounds.Top, paint);
+            if (cell.DrawBottom) canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, paint);
+            paint.Style = SKPaintStyle.Fill;
         }
         foreach (var image in page.Images)
         {

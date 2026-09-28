@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0-alpha.1 — Merged tables and structural editing
+
+- Add validated rectangular cell spans, identity-preserving merges and split-to-grid, span-aware row/column edits and merged-cell navigation.
+- Measure nested tables and in-cell pictures at their own widths; support vertical alignment, minimum row heights, row splitting and presentation-only first-header repetition.
+- Read/write DOCX gridSpan/vMerge, table row controls and vertical alignment; emit real HTML rowspan/colspan. Preserve malformed continuation content with import notes.
+- Add custom Uno Merge Cells, Split Cell, Nested Table, Vertical Align and Row Options workflows.
+- Avoid re-allocating canonical paragraph runs during validation; index structural anchor remapping and table page-slice interval queries. Add a reproducible editing benchmark with raw timings and allocations.
+- Add topology, nested layout, interchange, randomized structural/history regression tests and a sixth real-input browser suite. This remains a documented Word-compatibility subset.
+
 ## 0.3.0-alpha.1 — Typography and performance
 
 - Complete the previously uncommitted performance work: bounded paragraph-layout LRU, font-version invalidation, caret interval index, allocation-reduced hit testing, and shared pagination for printing/PNG export.

@@ -34,76 +34,12 @@ public sealed partial class EditorSession
         InsertBlock(new ImageBlock { Data = data, ContentType = contentType, Width = width * ratio, Height = height * ratio, AltText = altText }, "Insert picture");
     }
     public TableBlock? CurrentTable => Index.At(Selection.Active).Table;
-    private (TableBlock Table, int Row, int Column) TableLocation()
-    {
-        var paragraph = CurrentParagraph;
-        var table = CurrentTable ?? throw new InvalidOperationException("Place the cursor in a table first.");
-        for (var row = 0; row < table.Rows.Count; row++)
-            for (var column = 0; column < table.Rows[row].Cells.Count; column++)
-                if (DocumentModel.Walk(table.Rows[row].Cells[column].Blocks).Contains(paragraph)) return (table, row, column);
-        throw new InvalidOperationException("The current table cell could not be found.");
-    }
-    public void AddTableRow() => InsertTableRow(false);
-    public void AddTableRowAbove() => InsertTableRow(true);
-    private void InsertTableRow(bool above)
-    {
-        var (table, row, _) = TableLocation();
-        if (table.Rows.Count >= 200) throw new InvalidOperationException("A table may contain at most 200 rows.");
-        StructuralEdit(above ? "Insert row above" : "Insert row below", () =>
-        {
-            var item = new TableRow();
-            for (var i = 0; i < table.Rows.Max(r => r.Cells.Count); i++) item.Cells.Add(new());
-            table.Rows.Insert(row + (above ? 0 : 1), item);
-            var start = Index.StartOf((Paragraph)item.Cells[0].Blocks[0]); Selection = new(start, start);
-        }, preserveSelection: false);
-    }
-    public void AddTableColumn() => InsertTableColumn(false);
-    public void AddTableColumnBefore() => InsertTableColumn(true);
-    private void InsertTableColumn(bool before)
-    {
-        var (table, _, column) = TableLocation();
-        var count = table.Rows.Max(r => r.Cells.Count);
-        if (count >= 20) throw new InvalidOperationException("A table may contain at most 20 columns.");
-        StructuralEdit(before ? "Insert column left" : "Insert column right", () =>
-        {
-            var insertion = column + (before ? 0 : 1);
-            foreach (var row in table.Rows)
-            {
-                while (row.Cells.Count < count) row.Cells.Add(new());
-                row.Cells.Insert(insertion, new());
-            }
-            if (table.ColumnWidths.Count != count || table.ColumnWidths.Any(w => !double.IsFinite(w) || w <= 0)) table.ColumnWidths = Enumerable.Repeat(1d, count).ToList();
-            table.ColumnWidths.Insert(insertion, table.ColumnWidths[Math.Min(column, count - 1)]);
-        });
-    }
-    public void DeleteTableRow()
-    {
-        var (table, row, _) = TableLocation();
-        if (table.Rows.Count == 1) { DeleteTable(); return; }
-        StructuralEdit("Delete row", () =>
-        {
-            table.Rows.RemoveAt(row);
-            var paragraph = DocumentModel.Walk(table.Rows[Math.Min(row, table.Rows.Count - 1)].Cells[0].Blocks).First();
-            var caret = Index.StartOf(paragraph); Selection = new(caret, caret);
-        }, preserveSelection: false);
-    }
-    public void DeleteTableColumn()
-    {
-        var (table, rowIndex, column) = TableLocation();
-        if (table.Rows.Max(r => r.Cells.Count) == 1) { DeleteTable(); return; }
-        StructuralEdit("Delete column", () =>
-        {
-            foreach (var row in table.Rows)
-            {
-                if (column < row.Cells.Count) row.Cells.RemoveAt(column);
-                if (row.Cells.Count == 0) row.Cells.Add(new());
-            }
-            if (column < table.ColumnWidths.Count) table.ColumnWidths.RemoveAt(column);
-            var cells = table.Rows[rowIndex].Cells;
-            var paragraph = DocumentModel.Walk(cells[Math.Min(column, cells.Count - 1)].Blocks).First();
-            var caret = Index.StartOf(paragraph); Selection = new(caret, caret);
-        }, preserveSelection: false);
-    }
+    public void AddTableRow() => InsertGridRow(false);
+    public void AddTableRowAbove() => InsertGridRow(true);
+    public void AddTableColumn() => InsertGridColumn(false);
+    public void AddTableColumnBefore() => InsertGridColumn(true);
+    public void DeleteTableRow() => DeleteGridRow();
+    public void DeleteTableColumn() => DeleteGridColumn();
     public void DeleteTable()
     {
         var table = CurrentTable ?? throw new InvalidOperationException("Place the cursor in a table first.");
@@ -127,7 +63,7 @@ public sealed partial class EditorSession
     {
         var index = Index; var address = index.At(Selection.Active); var table = address.Table;
         if (table is null) return false;
-        var cells = table.Rows.SelectMany(r => r.Cells).ToArray();
+        var cells = new TableGrid(table).Regions.Select(r => r.Cell).ToArray();
         var cell = Array.FindIndex(cells, c => DocumentModel.Walk(c.Blocks).Contains(address.Paragraph));
         var next = cell + (backwards ? -1 : 1);
         if (next >= cells.Length) { if (!IsReadOnly) AddTableRow(); return true; }

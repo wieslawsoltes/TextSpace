@@ -48,11 +48,19 @@ public static partial class DocumentJson
                         if (chars > MaxCharacters) throw new InvalidDataException("The document exceeds five million characters.");
                         p.Normalize(); break;
                     case TableBlock table:
-                        if (table.Rows is null || table.Rows.Count is < 1 or > 200 || !double.IsFinite(table.CellPadding) || table.CellPadding is < 0 or > 72) throw new InvalidDataException("Invalid table.");
-                        foreach (var row in table.Rows)
+                        if (table.Rows is null || table.Rows.Count is < 1 or > 200 || !double.IsFinite(table.CellPadding) || table.CellPadding is < 0 or > 72)
+                            throw new InvalidDataException("Invalid table.");
+                        if (table.Rows.Any(row => row?.Cells is null || row.Cells.Count is < 1 or > 20
+                            || !double.IsFinite(row.MinimumHeight) || row.MinimumHeight is < 0 or > 4000))
+                            throw new InvalidDataException("Invalid table row.");
+                        // Legacy native documents could have ragged rows. Add explicit logical slots.
+                        var columns = table.Rows.Max(row => row.Cells.Count);
+                        foreach (var row in table.Rows) while (row.Cells.Count < columns) row.Cells.Add(new());
+                        var grid = new TableGrid(table);
+                        foreach (var region in grid.Regions)
                         {
-                            if (row.Cells is null || row.Cells.Count is < 1 or > 20) throw new InvalidDataException("Invalid table row.");
-                            foreach (var cell in row.Cells) { if (cell.Blocks is null) throw new InvalidDataException("Invalid table cell."); if (cell.Blocks.Count == 0) cell.Blocks.Add(new Paragraph()); Walk(cell.Blocks, depth + 1); }
+                            if (region.Cell.Blocks.Count == 0) region.Cell.Blocks.Add(new Paragraph());
+                            Walk(region.Cell.Blocks, depth + 1);
                         }
                         break;
                     case SectionBreakBlock section:
