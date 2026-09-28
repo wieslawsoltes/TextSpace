@@ -7,16 +7,19 @@ namespace TextSpace.App;
 
 internal sealed partial class BrowserRecoveryArchiveStore : IRecoveryArchiveStore
 {
-    [JSImport("globalThis.TextSpaceRecovery.protect")] private static partial Task<string> Protect(string original);
+    [JSImport("globalThis.TextSpaceRecovery.protectPayload")] private static partial Task<string> Protect(string envelope);
     [JSImport("globalThis.TextSpaceRecovery.list")] private static partial Task<string> List();
-    [JSImport("globalThis.TextSpaceRecovery.read")] private static partial Task<string?> Read(string id);
+    [JSImport("globalThis.TextSpaceRecovery.readPayload")] private static partial Task<string?> Read(string id);
     [JSImport("globalThis.TextSpaceRecovery.complete")] internal static partial void Complete();
     [JSImport("globalThis.TextSpaceRecovery.publishState")] internal static partial void PublishState(string json);
 
     public async Task<RecoveryArchive> ProtectAsync(string original, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return JsonSerializer.Deserialize(await Protect(original), RecoveryWireContext.Default.RecoveryArchive)
+        // Frame leading BOMs as data, not runtime encoding signatures. JavaScript
+        // verifies these exact original bytes before committing the archive.
+        var envelope = RecoveryArchiveTransport.Encode(original);
+        return JsonSerializer.Deserialize(await Protect(envelope), RecoveryWireContext.Default.RecoveryArchive)
             ?? throw new InvalidDataException("The browser did not confirm original protection.");
     }
     public async Task<IReadOnlyList<RecoveryArchive>> ListProtectedAsync(CancellationToken cancellationToken = default)
@@ -26,12 +29,12 @@ internal sealed partial class BrowserRecoveryArchiveStore : IRecoveryArchiveStor
     }
     public async Task<string?> ReadProtectedAsync(string id, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested(); return await Read(id);
+        cancellationToken.ThrowIfCancellationRequested();
+        var envelope = await Read(id);
+        return envelope is null ? null : RecoveryArchiveTransport.Decode(envelope, id);
     }
 }
 
-// Closed diagnostic DTOs survive trimming without retaining unrelated application
-// metadata. They contain only UI state and geometry, never the original payload.
 internal sealed record RecoveryControlSnapshot(string Name, double X, double Y, double Width, double Height, bool Enabled);
 internal sealed record RecoveryUiSnapshot(bool Active, bool CanDownload, bool RepairPreviewed, string Message, List<RecoveryControlSnapshot> Controls);
 

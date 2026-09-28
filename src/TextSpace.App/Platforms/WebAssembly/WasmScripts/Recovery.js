@@ -40,50 +40,70 @@
     });
   }
   function metadata(value) {
-    if (!Array.isArray(value) || value.length > MAX_COUNT || value.some(x => !validId(x.id) || !Number.isSafeInteger(x.bytes) || x.bytes < 0 || typeof x.savedAt !== 'string'))
+    if (!Array.isArray(value) || value.length > MAX_COUNT || value.some(x => !x || !validId(x.id) || !Number.isSafeInteger(x.bytes) || x.bytes < 0 || x.bytes > MAX_ORIGINAL || typeof x.savedAt !== 'string'))
       throw new Error('Protected recovery index is invalid; no original was changed.');
     return value;
   }
+  function originalBytes(original) {
+    if (typeof original !== 'string' || original.length > MAX_ORIGINAL) throw new Error('Original recovery exceeds 32 MB.');
+    const bytes = encoder.encode(original);
+    if (bytes.length > MAX_ORIGINAL) throw new Error('Original recovery exceeds 32 MB.');
+    return bytes;
+  }
+  async function protectOriginal(original) {
+    const bytes = originalBytes(original), id = await digest(bytes), db = await database();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('workspace', 'readwrite'), store = tx.objectStore('workspace');
+      let result, failure;
+      const fail = error => { failure = error; tx.abort(); };
+      const request = store.get(INDEX);
+      request.onsuccess = () => {
+        try {
+          const entries = metadata(request.result ?? []), existing = entries.find(x => x.id === id);
+          if (existing) {
+            const raw = store.get(prefix + id);
+            raw.onsuccess = () => { if (raw.result !== original || existing.bytes !== bytes.length) fail(new Error('Protected original checksum conflict.')); else result = existing; };
+            return;
+          }
+          if (entries.length >= MAX_COUNT || entries.reduce((sum, x) => sum + x.bytes, 0) + bytes.length > MAX_TOTAL)
+            throw new Error('Protected recovery storage is full. Download the original; no existing backup has been removed.');
+          result = { id, savedAt: new Date().toISOString(), bytes: bytes.length };
+          store.add(original, prefix + id);
+          store.put([...entries, result], INDEX);
+        } catch (error) { fail(error); }
+      };
+      tx.oncomplete = () => resolve(JSON.stringify(result));
+      tx.onabort = tx.onerror = () => reject(failure || tx.error || new Error('Original protection failed; active recovery is unchanged.'));
+    });
+  }
+  async function readOriginal(id) {
+    if (!validId(id)) throw new Error('Invalid protected recovery identifier.');
+    const original = await get(prefix + id);
+    if (original === undefined) return null;
+    if (await digest(originalBytes(original)) !== id) throw new Error('Protected original checksum verification failed.');
+    return original;
+  }
   globalThis.TextSpaceRecovery = Object.freeze({
-    async protect(original) {
-      if (typeof original !== 'string' || original.length > MAX_ORIGINAL) throw new Error('Original recovery exceeds 32 MB.');
-      const bytes = encoder.encode(original);
-      if (bytes.length > MAX_ORIGINAL) throw new Error('Original recovery exceeds 32 MB.');
-      const id = await digest(bytes), db = await database();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction('workspace', 'readwrite'), store = tx.objectStore('workspace');
-        let result, failure;
-        const fail = error => { failure = error; tx.abort(); };
-        const request = store.get(INDEX);
-        request.onsuccess = () => {
-          try {
-            const entries = metadata(request.result ?? []), existing = entries.find(x => x.id === id);
-            if (existing) {
-              const raw = store.get(prefix + id);
-              raw.onsuccess = () => { if (raw.result !== original) fail(new Error('Protected original checksum conflict.')); else result = existing; };
-              return;
-            }
-            if (entries.length >= MAX_COUNT || entries.reduce((sum, x) => sum + x.bytes, 0) + bytes.length > MAX_TOTAL)
-              throw new Error('Protected recovery storage is full. Download the original; no existing backup has been removed.');
-            result = { id, savedAt: new Date().toISOString(), bytes: bytes.length };
-            store.add(original, prefix + id);
-            store.put([...entries, result], INDEX);
-          } catch (error) { fail(error); }
-        };
-        tx.oncomplete = () => resolve(JSON.stringify(result));
-        tx.onabort = tx.onerror = () => reject(failure || tx.error || new Error('Original protection failed; active recovery is unchanged.'));
-      });
+    protect: protectOriginal,
+    read: readOriginal,
+    // Envelope framing keeps a leading U+FEFF inside data, not at the beginning
+    // of a native interop string. Verify both byte count and checksum before I/O.
+    async protectPayload(envelope) {
+      if (typeof envelope !== 'string' || envelope.length > MAX_ORIGINAL * 6 + 512)
+        throw new Error('Protected recovery transport exceeds its size limit.');
+      const payload = JSON.parse(envelope);
+      if (!payload || !validId(payload.sha256) || !Number.isSafeInteger(payload.utf8Bytes))
+        throw new Error('Invalid protected recovery transport.');
+      const bytes = originalBytes(payload.original);
+      if (bytes.length !== payload.utf8Bytes || await digest(bytes) !== payload.sha256)
+        throw new Error('Protected recovery transport checksum verification failed; no original was changed.');
+      return protectOriginal(payload.original);
+    },
+    async readPayload(id) {
+      const original = await readOriginal(id);
+      return original === null ? null : JSON.stringify({ original, sha256: id, utf8Bytes: originalBytes(original).length });
     },
     async list() { return JSON.stringify(metadata((await get(INDEX)) ?? []).sort((a, b) => b.savedAt.localeCompare(a.savedAt))); },
-    async read(id) {
-      if (!validId(id)) throw new Error('Invalid protected recovery identifier.');
-      const original = await get(prefix + id);
-      if (original === undefined) return null;
-      if (typeof original !== 'string' || original.length > MAX_ORIGINAL) throw new Error('Invalid protected original.');
-      const bytes = encoder.encode(original);
-      if (bytes.length > MAX_ORIGINAL || await digest(bytes) !== id) throw new Error('Protected original checksum verification failed.');
-      return original;
-    },
     complete() { delete globalThis.__textSpaceError; delete globalThis.__textSpaceRecoveryState; },
     publishState(json) { if (new URLSearchParams(location.search).get('test') === '1') globalThis.__textSpaceRecoveryState = JSON.parse(json); }
   });
