@@ -43,6 +43,14 @@ internal static partial class BrowserDiagnostics
                     json.WriteNumber("words", session.Document.WordCount);
                     json.WriteNumber("sections", TextSpace.Core.DocumentSections.Definitions(session.Document).Count);
                     json.WriteNumber("currentSection", session.CurrentSectionIndex);
+                    json.WriteNumber("textSnapshotBuilds", workbench.TextSnapshotBuilds);
+                    json.WriteString("displayedWordCount", workbench.DisplayedWordCount);
+                    var ruler = surface.Layout.RulerAt(session.Selection.Active);
+                    json.WriteStartObject("ruler"); json.WriteNumber("left", ruler.MarginLeft);
+                    json.WriteNumber("width", ruler.ContentWidth); json.WriteEndObject();
+                    json.WriteStartArray("layoutNotices");
+                    foreach (var notice in surface.Layout.Notices) json.WriteStringValue(notice.Message);
+                    json.WriteEndArray();
                     json.WriteStartArray("pageGeometry");
                     foreach (var item in surface.Layout.Pages)
                     {
@@ -50,7 +58,18 @@ internal static partial class BrowserDiagnostics
                         json.WriteNumber("top", surface.Layout.PageTop(item.Index)); json.WriteNumber("left", surface.Layout.PageLeft(item.Index));
                         json.WriteNumber("section", item.SectionIndex); json.WriteNumber("number", item.PageNumber);
                         json.WriteString("header", item.Header); json.WriteString("footer", item.Footer);
-                        json.WriteBoolean("blank", item.IsParityBlank); json.WriteEndObject();
+                        json.WriteBoolean("blank", item.IsParityBlank);
+                        json.WriteStartArray("regions");
+                        foreach (var region in item.Regions)
+                        {
+                            json.WriteStartObject(); json.WriteNumber("section", region.SectionIndex);
+                            json.WriteNumber("top", region.Top); json.WriteNumber("bottom", region.Bottom);
+                            json.WriteNumber("number", region.PageNumber); json.WriteNumber("sectionPages", region.SectionPageCount);
+                            json.WriteNumber("columns", region.Section.Page.Columns); json.WriteNumber("firstColumn", region.FirstColumn);
+                            json.WriteNumber("lastColumn", region.LastColumn); json.WriteBoolean("balanced", region.Balanced);
+                            json.WriteEndObject();
+                        }
+                        json.WriteEndArray(); json.WriteEndObject();
                     }
                     json.WriteEndArray();
                     json.WriteStartArray("fields");

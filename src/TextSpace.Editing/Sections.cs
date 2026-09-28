@@ -24,6 +24,28 @@ public sealed partial class EditorSession
         });
     }
 
+    public SectionBreakKind CurrentSectionStart => CurrentSectionIndex == 0 ? SectionBreakKind.NextPage
+        : Document.Blocks.OfType<SectionBreakBlock>().ElementAt(CurrentSectionIndex - 1).Kind;
+
+    public void SetSectionBreakKind(SectionBreakKind kind)
+    {
+        EnsureWritable();
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        var number = CurrentSectionIndex;
+        if (number == 0) throw new InvalidOperationException("The first section has no preceding section break.");
+        Execute("Section start", () => Document.Blocks.OfType<SectionBreakBlock>().ElementAt(number - 1).Kind = kind);
+    }
+
+    public void SetSection(Func<SectionDefinition, SectionDefinition> update, SectionBreakKind kind)
+    {
+        Execute("Section settings", () =>
+        {
+            if (CurrentSectionIndex > 0) SetSectionBreakKind(kind);
+            else if (kind != SectionBreakKind.NextPage) throw new InvalidOperationException("The first section starts the document.");
+            SetSection(update);
+        });
+    }
+
     public void InsertSectionBreak(SectionBreakKind kind = SectionBreakKind.NextPage)
     {
         EnsureWritable();

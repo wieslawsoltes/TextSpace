@@ -170,7 +170,8 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void Draw(SKCanvas canvas, Size area)
     {
         canvas.Clear(SKColor.Parse("#E8E8E8")); var paperLeft = PaperLeft; using var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 24), IsAntialias = true }; using var border = new SKPaint { Color = SKColor.Parse("#C4C4C4"), Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
-        for (var i = 0; i < Layout.Pages.Count; i++)
+        var visible = Layout.VisiblePages((_scrollY - 18) / Scale, (_scrollY - 18 + area.Height) / Scale);
+        for (var i = visible.Start; i < visible.End; i++)
         {
             var left = paperLeft + Layout.PageLeft(i) * Scale;
             var pageHeight = Layout.Pages[i].Settings.Height * Scale; var pageWidth = Layout.Pages[i].Settings.Width * Scale;
@@ -210,7 +211,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void UpdateRuler()
     {
         var pageIndex = Layout.Caret(Session.Selection.Active).PageIndex;
-        _ruler.PageLeft = PaperLeft + Layout.PageLeft(pageIndex) * Scale; _ruler.Page = Layout.Pages[pageIndex].Settings; _ruler.Paragraph = Session.CurrentParagraph.Format; _ruler.Scale = Scale; _ruler.Typeface = Renderer.Metrics.Typeface(new()); _ruler.Invalidate();
+        _ruler.PageLeft = PaperLeft + Layout.PageLeft(pageIndex) * Scale; _ruler.Page = Layout.RulerAt(Session.Selection.Active); _ruler.Paragraph = Layout.ParagraphFormatAt(Session.Selection.Active); _ruler.Scale = Scale; _ruler.Typeface = Renderer.Metrics.Typeface(new()); _ruler.Invalidate();
     }
     private void UpdateInputPosition()
     {

@@ -38,7 +38,13 @@ public sealed partial class DocumentRenderer : IDisposable
         }
         if (options.ShowBoundaries)
         {
-            paint.Style = SKPaintStyle.Stroke; paint.StrokeWidth = 0.4f; paint.Color = Color("#CDD6E0"); canvas.DrawRect((float)settings.MarginLeft, (float)settings.MarginTop, (float)settings.ContentWidth, (float)settings.ContentHeight, paint); paint.Style = SKPaintStyle.Fill;
+            paint.Style = SKPaintStyle.Stroke; paint.StrokeWidth = 0.4f; paint.Color = Color("#CDD6E0");
+            if (page.Regions.Count > 0)
+            {
+                foreach (var region in page.Regions) canvas.DrawRect(Rect(region.Bounds), paint);
+            }
+            else canvas.DrawRect((float)settings.MarginLeft, (float)settings.MarginTop, (float)settings.ContentWidth, (float)settings.ContentHeight, paint);
+            paint.Style = SKPaintStyle.Fill;
         }
         foreach (var cell in page.Cells)
         {
@@ -66,6 +72,9 @@ public sealed partial class DocumentRenderer : IDisposable
         }
         foreach (var line in page.Lines)
         {
+            var lineSettings = line.Region?.Section.Page ?? settings;
+            var columnLeft = line.Region?.ColumnLeft(line.ColumnIndex) ?? settings.MarginLeft;
+            var columnRight = columnLeft + lineSettings.ColumnWidth;
             if (line.Format.Shading is not null) { paint.Color = Color(line.Format.Shading); canvas.DrawRect((float)line.X, (float)line.Y, (float)Math.Max(1, line.Width), (float)line.Height, paint); }
             foreach (var chunk in line.Chunks)
             {
@@ -88,14 +97,14 @@ public sealed partial class DocumentRenderer : IDisposable
             DrawBarTabs(canvas, line);
             if (line.Marker is not null) { paint.Color = Color(line.DefaultStyle.Color); Metrics.Draw(canvas, line.Marker, line.X - 14, line.Baseline, line.DefaultStyle, paint); }
             if (options.ShowFormatting && line.LastInParagraph) { paint.Color = Color("#8F9BAB"); Metrics.Draw(canvas, "¶", line.X + line.Width + 2, line.Baseline, line.DefaultStyle, paint); }
-            if (line.Format.BorderBottom && line.LastInParagraph) { paint.Color = Color("#8E9EAD"); paint.StrokeWidth = 0.6f; canvas.DrawLine((float)line.X, (float)(line.Y + line.Height + 3), (float)(settings.Width - settings.MarginRight), (float)(line.Y + line.Height + 3), paint); }
+            if (line.Format.BorderBottom && line.LastInParagraph) { paint.Color = Color("#8E9EAD"); paint.StrokeWidth = 0.6f; canvas.DrawLine((float)line.X, (float)(line.Y + line.Height + 3), (float)columnRight, (float)(line.Y + line.Height + 3), paint); }
             if (options.ShowComments && document.Comments.Any(c => !c.Resolved && c.Start >= line.Start && c.Start <= line.End))
             {
-                paint.Color = Color("#185ABD"); canvas.DrawRoundRect((float)(settings.Width - settings.MarginRight + 12), (float)(line.Y + 2), 12, 9, 2, 2, paint);
+                paint.Color = Color("#185ABD"); canvas.DrawRoundRect((float)(columnRight + 5), (float)(line.Y + 2), 12, 9, 2, 2, paint);
             }
             if (options.ShowChanges && document.Changes.Any(c => c.Start >= line.Start && c.Start <= line.End || c.Start < line.Start && c.Start + c.Inserted.Length > line.Start))
             {
-                paint.Color = Color("#C43E1C"); paint.StrokeWidth = 1.5f; canvas.DrawLine((float)(settings.MarginLeft - 14), (float)line.Y, (float)(settings.MarginLeft - 14), (float)(line.Y + line.Height), paint);
+                paint.Color = Color("#C43E1C"); paint.StrokeWidth = 1.5f; canvas.DrawLine((float)(columnLeft - 14), (float)line.Y, (float)(columnLeft - 14), (float)(line.Y + line.Height), paint);
             }
         }
         if (options.ShowFormatting)

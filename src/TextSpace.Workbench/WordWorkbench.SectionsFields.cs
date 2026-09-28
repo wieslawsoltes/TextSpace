@@ -9,6 +9,8 @@ public sealed partial class WordWorkbench
         Ribbon.InsertGroup("Layout", 1, () => Group("Sections",
             MenuButton("pagebreak", "Section Break", new OfficeMenu()
                 .Add("Next Page Section", () => RunEdit("Section break", () => Session.InsertSectionBreak(SectionBreakKind.NextPage)))
+                .Add("Continuous Section", () => RunEdit("Section break", () => Session.InsertSectionBreak(SectionBreakKind.Continuous)))
+                .Add("Next Column Section", () => RunEdit("Section break", () => Session.InsertSectionBreak(SectionBreakKind.NextColumn)))
                 .Add("Odd Page Section", () => RunEdit("Section break", () => Session.InsertSectionBreak(SectionBreakKind.OddPage)))
                 .Add("Even Page Section", () => RunEdit("Section break", () => Session.InsertSectionBreak(SectionBreakKind.EvenPage)))
                 .Separator().Add("Column Break", () => RunEdit("Column break", Session.InsertColumnBreak))),
@@ -45,6 +47,9 @@ public sealed partial class WordWorkbench
             effective = DocumentSections.Resolve(item, effective);
         var dialog = new OfficeDialog($"Section {number + 1} Settings", "Apply", 620);
         dialog.AddDescription("These settings apply to the current section. Use Layout → Page Setup for its paper size, margins, and columns. Unchecked Link to previous with an empty story creates an explicitly blank header or footer.");
+        var sectionStart = Choice(dialog, "Section start", Enum.GetNames<SectionBreakKind>(), Session.CurrentSectionStart.ToString());
+        sectionStart.IsEnabled = number > 0;
+        dialog.AddDescription("Continuous sections share a physical page when paper sizes match. Next-column sections require the same column grid. Shared pages keep the first region's header/footer; body PAGE and SECTION fields use the containing region.");
         var first = new OfficeCheckBox("Different first page", definition.Options.DifferentFirstPage);
         var even = new OfficeCheckBox("Different odd and even pages", definition.Options.DifferentOddAndEven);
         dialog.Body.Children.Add(OfficeTheme.Column(first, even));
@@ -78,6 +83,8 @@ public sealed partial class WordWorkbench
         }
         if (!Enum.TryParse<PageNumberStyle>(numberStyle.Value, out var format) || !Enum.IsDefined(format))
             throw new InvalidOperationException("Choose a valid page number format.");
+        if (!Enum.TryParse<SectionBreakKind>(sectionStart.Value, out var startKind) || !Enum.IsDefined(startKind))
+            throw new InvalidOperationException("Choose a valid section start.");
         static string? Value((TextBox Text, OfficeCheckBox Linked) story) => story.Linked.IsChecked ? null : story.Text.Text;
         Session.SetSection(section => section with
         {
@@ -88,7 +95,7 @@ public sealed partial class WordWorkbench
                 PageNumberStart = restart, NumberStyle = format,
                 FirstHeader = Value(firstHeader), FirstFooter = Value(firstFooter), EvenHeader = Value(evenHeader), EvenFooter = Value(evenFooter)
             }
-        });
+        }, startKind);
         Notify($"Updated section {number + 1}. Use F9 to refresh body field results.");
     }
 

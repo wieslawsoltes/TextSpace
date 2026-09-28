@@ -48,3 +48,23 @@ dotnet run --project benchmarks/TextSpace.Performance -c Release -- --table-edit
 | Insert a column and Undo, 100×16 table / 1,601 bookmarks | 140.3147 ms | 78.7507 ms | 22,595,784 → 23,172,504 |
 
 The table operation is faster in this sample but allocates about 2.6% more managed bytes because it now maintains validated merged-cell topology and richer native metadata. The remaining allocations are not hidden by the timing improvement. Results are observations with raw per-iteration data, not fixed performance promises. The 40-byte normalization result is the benchmark Stopwatch allocation. These are CPU engine measurements, not browser input latency or FPS measurements.
+
+## Visible-page queries and workbench statistics (0.5)
+
+`DocumentLayout.VisiblePages(top, bottom)` returns a half-open `VisiblePageRange` in O(log pages), using the existing mixed-paper prefix offsets. It allocates no enumerator and excludes page gaps that do not intersect the viewport. `DocumentSurface` iterates that range instead of checking every physical page during each repaint.
+
+`DocumentTextSnapshot` explicitly captures text, a word count and the non-whitespace character count. It has no global cache over mutable documents. The workbench invalidates its presentation snapshot on a document notification, a changed revision or a replaced model; selection-only changes count the selected range, while scrolling reuses the existing statistics. Core word counting uses a generated regex Count path rather than materializing a MatchCollection. Full-text index construction and snapshot history remain on edit paths.
+
+```sh
+dotnet run --project benchmarks/TextSpace.Performance -c Release -- --interaction
+```
+
+`performance-interaction.json` compares the previous operations with the replacement paths on one Debian 13 x64/.NET 10.0.12 host, three warmups and seven measurements. The source validates identical viewport and word-count results before reporting timings. It records raw samples and thread-local managed allocations.
+
+| Operation | Previous path median | New path median | Managed allocations |
+| --- | ---: | ---: | --- |
+| 2,000 viewport queries over 10,000 mixed-height pages | 167.2304 ms | 0.5510 ms | 0 → 0 bytes |
+| 25 unchanged-document word-count requests, 500 paragraphs / 62,889 UTF-16 units | 152.5370 ms | Below 0.001 ms for cached reads | 62,496,472 → 0 bytes after capture |
+| Capture the new text snapshot once | Not applicable | 5.1327 ms | 365,376 bytes |
+
+Cached property reads approach timer resolution; their ratio is not a useful end-to-end speedup claim. Capture cost is reported separately and is paid again after document changes. These measurements exclude Skia rendering, browser input, full edit/repagination, startup, diagnostic instrumentation and process/native memory. They are not browser FPS or typing-latency claims. Continuous-region metadata and balancing add pagination work; paragraph measurement reuse remains bounded by the existing LRU.

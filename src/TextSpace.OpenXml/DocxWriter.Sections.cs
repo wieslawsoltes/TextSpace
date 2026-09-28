@@ -44,7 +44,7 @@ public sealed partial class DocxWriter
             Story("header", "even", globalEvenOdd && !options.DifferentOddAndEven ? effective.Header : options.EvenHeader),
             Story("footer", "default", section.Footer), Story("footer", "first", options.FirstFooter),
             Story("footer", "even", globalEvenOdd && !options.DifferentOddAndEven ? effective.Footer : options.EvenFooter),
-            E("type", V(kind switch { SectionBreakKind.OddPage => "oddPage", SectionBreakKind.EvenPage => "evenPage", _ => "nextPage" })),
+            E("type", V(kind switch { SectionBreakKind.OddPage => "oddPage", SectionBreakKind.EvenPage => "evenPage", SectionBreakKind.Continuous => "continuous", SectionBreakKind.NextColumn => "nextColumn", _ => "nextPage" })),
             E("pgSz", new XAttribute(W + "w", Twips(page.Width)), new XAttribute(W + "h", Twips(page.Height)), page.Width > page.Height ? new XAttribute(W + "orient", "landscape") : null),
             E("pgMar", new XAttribute(W + "top", Twips(page.MarginTop)), new XAttribute(W + "right", Twips(page.MarginRight)), new XAttribute(W + "bottom", Twips(page.MarginBottom)), new XAttribute(W + "left", Twips(page.MarginLeft)), new XAttribute(W + "header", Twips(page.HeaderDistance)), new XAttribute(W + "footer", Twips(page.FooterDistance)), new XAttribute(W + "gutter", 0)),
             E("pgNumType", new XAttribute(W + "fmt", options.NumberStyle switch

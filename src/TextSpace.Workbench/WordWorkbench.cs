@@ -26,6 +26,14 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
     private Grid? _titleBar;
     private Border? _backstage;
     private bool _nativeUiRefreshPending;
+    public int TextSnapshotBuilds { get; private set; }
+    public string DisplayedWordCount => _wordStatus.Text;
+    private DocumentTextSnapshot? _statistics;
+    private TextIndex? _presentationIndex;
+    private DocumentModel? _presentationDocument;
+    private long _presentationRevision = -1;
+    private TextSelection? _wordCountSelection;
+    private int _selectedWords, _presentationSectionCount;
     private bool _disposed, _autoSave = true, _focusMode, _busy, _reviewVisible, _navigationVisible;
     private string _navigationMode = "Headings", _reviewMode = "Comments";
     private string _searchQuery = "", _replaceText = "";
@@ -100,6 +108,7 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
     private void OnSessionChanged(object? sender, EditorChangedEventArgs e)
     {
         if (_disposed) return;
+        if (e.Kind == EditorChangeKind.Document) _presentationRevision = -1;
         if (Surface.IsProcessingNativeInput)
         {
             if (!_nativeUiRefreshPending)
@@ -118,20 +127,37 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
         {
             if (_autoSave) { _saveTimer.Stop(); _saveTimer.Start(); _saveState.Text = "Saving…"; }
             if (_navigationVisible) RefreshNavigation(); if (_reviewVisible) RefreshReview();
+            if (Surface.Layout.Notices.Count > 0) Notify(Surface.Layout.Notices[0].Message, true);
         }
         StateChanged?.Invoke();
     }
+    private void RefreshPresentationSnapshot()
+    {
+        if (_presentationRevision == Session.Revision && ReferenceEquals(_presentationDocument, Session.Document)) return;
+        _presentationIndex = Session.Index;
+        _statistics = new DocumentTextSnapshot(_presentationIndex.Text); TextSnapshotBuilds++;
+        _presentationDocument = Session.Document; _presentationRevision = Session.Revision;
+        _wordCountSelection = null;
+        _presentationSectionCount = 1 + Session.Document.Blocks.OfType<SectionBreakBlock>().Count();
+    }
     private void RefreshStatus()
     {
-        var caret = Surface.Layout.Caret(Session.Selection.Active); _pageStatus.Text = $"Page {caret.PageIndex + 1} of {Surface.Layout.Pages.Count}" + (Session.Document.Blocks.OfType<SectionBreakBlock>().Any() ? $" · Section {Session.CurrentSectionIndex + 1}" : "");
-        _wordStatus.Text = Session.Selection.IsEmpty ? $"{Session.Document.WordCount:N0} words" : $"{System.Text.RegularExpressions.Regex.Matches(Session.SelectedText(), @"\b[\p{L}\p{N}]+\b").Count:N0} of {Session.Document.WordCount:N0} words";
+        RefreshPresentationSnapshot();
+        var caret = Surface.Layout.Caret(Session.Selection.Active); _pageStatus.Text = $"Page {caret.PageIndex + 1} of {Surface.Layout.Pages.Count}" + (_presentationSectionCount > 1 ? $" · Section {(Surface.Layout.RegionAt(Session.Selection.Active)?.SectionIndex ?? 0) + 1}" : "");
+        if (_wordCountSelection != Session.Selection)
+        {
+            _wordCountSelection = Session.Selection;
+            _selectedWords = Session.Selection.IsEmpty ? 0 : _statistics!.WordsIn(Session.Selection);
+        }
+        _wordStatus.Text = Session.Selection.IsEmpty ? $"{_statistics!.WordCount:N0} words" : $"{_selectedWords:N0} of {_statistics!.WordCount:N0} words";
         _documentTitle.Text = Session.Document.Title; _zoomSlider.Value = Surface.Zoom; _zoomLabel.Content = Math.Round(Surface.Zoom * 100).ToString(CultureInfo.InvariantCulture) + "%";
-        Ribbon.SetTabVisible("Table Design", Session.CurrentTable is not null); Ribbon.SetTabVisible("Table Layout", Session.CurrentTable is not null); Ribbon.SetTabVisible("Picture Format", Surface.SelectedImageId is not null);
+        Ribbon.SetTabVisible("Table Design", _presentationIndex!.At(Session.Selection.Active).Table is not null); Ribbon.SetTabVisible("Table Layout", _presentationIndex!.At(Session.Selection.Active).Table is not null); Ribbon.SetTabVisible("Picture Format", Surface.SelectedImageId is not null);
         StateChanged?.Invoke();
     }
     private void RefreshFormatting()
     {
-        var style = Session.TypingStyle; var paragraph = Session.CurrentParagraph.Format;
+        RefreshPresentationSnapshot();
+        var style = Session.TypingStyle; var paragraph = _presentationIndex!.At(Session.Selection.Active).Paragraph.Format;
         void Selected(string id, bool value) { if (_buttons.TryGetValue(id, out var button)) button.IsSelected = value; }
         Selected("bold", style.Bold); Selected("italic", style.Italic); Selected("underline", style.Underline); Selected("strike", style.StrikeThrough); Selected("superscript", style.Superscript); Selected("subscript", style.Subscript);
         Selected("align-left", paragraph.Alignment == TextSpace.Core.TextAlignment.Left); Selected("align-center", paragraph.Alignment == TextSpace.Core.TextAlignment.Center); Selected("align-right", paragraph.Alignment == TextSpace.Core.TextAlignment.Right); Selected("justify", paragraph.Alignment == TextSpace.Core.TextAlignment.Justify);

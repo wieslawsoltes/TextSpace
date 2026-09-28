@@ -101,8 +101,11 @@ public sealed partial class DocxReader
         _sectionKinds = properties.Select(p =>
         {
             var type = Val(p?.Element(W + "type"));
-            if (type is "continuous" or "nextColumn") Warn("Continuous and next-column section starts are normalized to next-page sections; section settings are retained.");
-            return type switch { "oddPage" => SectionBreakKind.OddPage, "evenPage" => SectionBreakKind.EvenPage, _ => SectionBreakKind.NextPage };
+            return type switch
+            {
+                "continuous" => SectionBreakKind.Continuous, "nextColumn" => SectionBreakKind.NextColumn,
+                "oddPage" => SectionBreakKind.OddPage, "evenPage" => SectionBreakKind.EvenPage, _ => SectionBreakKind.NextPage
+            };
         }).ToArray();
     }
 }

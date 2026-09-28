@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0-alpha.1 — Continuous sections and interaction performance
+
+- Preserve continuous and next-column section kinds through native/DOCX editing and interchange; change starts with atomic section settings.
+- Add physical-page section regions, independent numbering/field context, column-aware rulers, explicit layout notices and bounded paragraph-band balancing.
+- Keep page, table, image, repeated-header and parity behavior under shared-region flow with progress and ownership tests.
+- Reuse named HTML pages for same-paper continuous flow without a forced page break.
+- Query visible page ranges logarithmically and reuse revision-scoped workbench statistics/ruler data; avoid materialized word matches.
+- Add engine/interchange/fuzz tests, a seventh real-input Chromium suite and reproducible query microbenchmarks with capture costs. Full Word parity is not claimed.
+
 ## 0.4.0-alpha.1 — Merged tables and structural editing
 
 - Add validated rectangular cell spans, identity-preserving merges and split-to-grid, span-aware row/column edits and merged-cell navigation.

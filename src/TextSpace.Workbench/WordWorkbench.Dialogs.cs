@@ -186,7 +186,7 @@ public sealed partial class WordWorkbench
     {
         var dialog = new OfficeDialog("About TextSpace", "Close", 530);
         dialog.Body.Children.Add(OfficeTheme.Text("TextSpace", 30, OfficeTheme.Accent, true));
-        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.4.0-alpha.1.");
+        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.5.0-alpha.1.");
         dialog.AddDescription("Original office-style controls and reusable document libraries. Open-source font substitutes are included; Microsoft fonts and branding are not distributed.");
         dialog.AddDescription("TextSpace is not affiliated with Microsoft. Microsoft Word and Microsoft 365 are trademarks of Microsoft. Source code: MIT License.");
         dialog.AddDescription("Recovery storage: " + Host.StorageDescription + ". No document upload, account, analytics, or AI service is required."); await ShowDialogAsync(dialog);
