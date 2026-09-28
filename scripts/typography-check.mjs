@@ -77,7 +77,16 @@ try {
   await check('DOCX export and reimport preserves typography semantics', async () => {
     await click('File tab'); await click('File Export'); const pending = page.waitForEvent('download'); await click('Word document'); const download = await pending;
     await download.saveAs(output + '/typography.docx'); assert.equal((await fs.readFile(output + '/typography.docx')).subarray(0, 2).toString(), 'PK');
-    await click('Back to document'); await readyInput((await state()).text);
+    await click('Back to document');
+    // A completed download may leave browser-window focus outside the page even
+    // when its shared native textarea is still document.activeElement. Acquire
+    // real page/editor focus before testing the keyboard-open command.
+    await page.bringToFront();
+    const { canvas } = await state();
+    await page.mouse.click(canvas.x + canvas.paperLeft + 75 * canvas.scale,
+      canvas.y + 18 + 75 * canvas.scale - canvas.scrollY);
+    await until(() => page.evaluate(() => document.hasFocus()), 'Browser page did not regain focus');
+    await readyInput((await state()).text);
     const chooser = page.waitForEvent('filechooser'); await page.keyboard.press('Control+o'); await (await chooser).setFiles(output + '/typography.docx'); await page.waitForTimeout(500);
     if ((await state()).dialog) await click('Continue without a copy');
     await until(async () => !(await state()).dialog && (await state()).typography.tabStops[0]?.relative === false, 'DOCX tab normalization not imported');
@@ -121,7 +130,7 @@ try {
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;
-  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
+  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ focused: document.hasFocus(), visibility: document.visibilityState, active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
   await page.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));
