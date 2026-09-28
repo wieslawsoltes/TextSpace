@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TextSpace.Core;
@@ -12,7 +13,8 @@ public static partial class DocumentJson
     public static DocumentModel Clone(DocumentModel document) => Load(Save(document));
     public static DocumentModel Load(string json)
     {
-        if (json.Length > MaxFileBytes) throw new InvalidDataException("The document exceeds the 32 MB import limit.");
+        ArgumentNullException.ThrowIfNull(json);
+        if (json.Length > MaxFileBytes || Encoding.UTF8.GetByteCount(json) > MaxFileBytes) throw new InvalidDataException("The document exceeds the 32 MB import limit.");
         var document = JsonSerializer.Deserialize(json, DocumentJsonContext.Default.DocumentModel) ?? throw new InvalidDataException("The document is empty.");
         Validate(document); return document;
     }
@@ -104,4 +106,5 @@ public static partial class DocumentJson
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(DocumentModel))]
+[JsonSerializable(typeof(TabStop))]
 internal partial class DocumentJsonContext : JsonSerializerContext;
