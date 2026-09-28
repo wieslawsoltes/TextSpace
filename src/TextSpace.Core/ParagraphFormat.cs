@@ -5,6 +5,7 @@ public enum ListKind { None, Bullet, Number }
 
 public sealed record ParagraphFormat
 {
+    private System.Collections.Immutable.ImmutableArray<TabStop> _tabStops = [];
     public string StyleName { get; init; } = "Normal";
     public TextAlignment Alignment { get; init; }
     public double LeftIndent { get; init; }
@@ -20,7 +21,13 @@ public sealed record ParagraphFormat
     public bool KeepLinesTogether { get; init; }
     public bool WidowControl { get; init; } = true;
     [System.Text.Json.Serialization.JsonConverter(typeof(TabStopArrayJsonConverter))]
-    public System.Collections.Immutable.ImmutableArray<TabStop> TabStops { get; init; } = [];
+    public System.Collections.Immutable.ImmutableArray<TabStop> TabStops
+    {
+        get => _tabStops;
+        // Generated init-only deserialization can supply default(T) for an absent
+        // legacy member; the field initializer alone is not a sufficient invariant.
+        init => _tabStops = value.IsDefault ? [] : value;
+    }
     public bool PageBreakBefore { get; init; }
     public bool BorderBottom { get; init; }
     public string? Shading { get; init; }
