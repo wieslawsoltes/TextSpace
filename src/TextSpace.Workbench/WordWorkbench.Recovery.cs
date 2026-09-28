@@ -31,7 +31,9 @@ public sealed partial class WordWorkbench
     {
         var file = await Host.OpenFileAsync(".textspace"); if (file is null) return;
         if (file.Bytes.Length > DocumentJson.MaxFileBytes) throw new InvalidDataException("The native file exceeds 32 MB.");
-        var original = new UTF8Encoding(false, true).GetString(file.Bytes).TrimStart('\uFEFF');
+        // Preserve the UTF-8 BOM in the protected original. The repair parser
+        // handles that marker on a separate parseable copy, never this payload.
+        var original = new UTF8Encoding(false, true).GetString(file.Bytes);
         var plan = DocumentRecovery.PrepareTabRepair(original);
         var dialog = new OfficeDialog("Open and Repair", "Protect original and open", 560);
         dialog.AddDescription("This operation creates a copy. Your source file is not changed. The original JSON is also protected separately from rolling AutoSave history before the copy opens.");

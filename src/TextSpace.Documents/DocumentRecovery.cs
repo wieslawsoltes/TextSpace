@@ -29,7 +29,10 @@ public static class DocumentRecovery
         ArgumentNullException.ThrowIfNull(original);
         if (original.Length > DocumentJson.MaxFileBytes || Encoding.UTF8.GetByteCount(original) > DocumentJson.MaxFileBytes)
             throw new InvalidDataException("The recovery document exceeds 32 MB.");
-        var root = JsonNode.Parse(original, documentOptions: new JsonDocumentOptions { MaxDepth = 64 }) as JsonObject
+        // A UTF-8 file may carry a BOM. Strip it only from the parseable copy;
+        // callers must archive the untouched original, including that marker.
+        var parseable = original.StartsWith('\uFEFF') ? original[1..] : original;
+        var root = JsonNode.Parse(parseable, documentOptions: new JsonDocumentOptions { MaxDepth = 64 }) as JsonObject
             ?? throw new InvalidDataException("Recovery requires a native JSON document object.");
         if (root["formatVersion"]?.GetValue<int>() != 1)
             throw new InvalidDataException("Unsupported native recovery format version.");
@@ -90,7 +93,7 @@ public static class DocumentRecovery
         }
         if (root["blocks"] is not JsonArray body) throw new InvalidDataException("Missing document blocks.");
         Walk(body, 0);
-        var repaired = issues.Count == 0 ? original : root.ToJsonString();
+        var repaired = issues.Count == 0 ? parseable : root.ToJsonString();
         // The full existing validator remains authoritative for every other
         // structure, review anchor, field, bookmark, geometry and size limit.
         _ = DocumentJson.Load(repaired);

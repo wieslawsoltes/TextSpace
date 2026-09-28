@@ -45,10 +45,9 @@ async function ready() {
   await until(async () => (await state())?.canvas.width > 200, 'Workbench is not laid out');
 }
 async function recovered() {
-  // Recovery starts with an intentionally retained startup error. Protection,
-  // font preparation and workbench construction are asynchronous. The old error
-  // is not evidence that the new operation has completed or failed. Observe the
-  // successful transition; do not clear error/state or invoke a hidden command.
+  // The previous startup error remains while protection, font preparation and
+  // workbench construction run. Observe the completed transition instead of
+  // treating that old error as the result of a new asynchronous repair operation.
   await page.waitForFunction(() => globalThis.__textSpaceState?.ready
     && !globalThis.__textSpaceError && !globalThis.__textSpaceRecoveryState?.active,
     null, { timeout: 150000 });
@@ -60,13 +59,12 @@ async function initial() {
   context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   page = await context.newPage();
   page.on('pageerror', error => report.errors.push(error.message));
-  // Arm protocol observation before any user gesture can synchronously open a chooser.
   page.on('filechooser', () => {});
   await page.goto(base + '?test=1', { waitUntil: 'domcontentloaded' }); await ready();
 }
 async function seed(original, entries = [], oldVersion = null) {
   await page.evaluate(async ({ original, entries, oldVersion }) => {
-    // Deliberate persisted-input/failure fixtures, not a command API or editing shortcut.
+    // Deliberate persisted-input/failure fixtures, not an editing shortcut.
     const db = await new Promise((resolve, reject) => {
       const request = indexedDB.open('TextSpace', 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
     });
@@ -105,6 +103,23 @@ async function focusEditor() {
   await page.mouse.click(canvas.x + canvas.paperLeft + 75 * canvas.scale, canvas.y + 18 + 75 * canvas.scale - canvas.scrollY);
   await until(() => page.evaluate(() => document.activeElement?.id === 'uno-input' && document.activeElement.tagName === 'TEXTAREA'), 'Native editor did not focus');
 }
+async function repairFile(original, title, filename) {
+  const path = output + '/' + filename; await fs.writeFile(path, original, 'utf8');
+  await click('Recovery tab'); const chooser = page.waitForEvent('filechooser');
+  await click('Open and Repair'); await (await chooser).setFiles(path);
+  await until(async () => (await state()).dialog, 'Repair confirmation did not open');
+  await click('Protect original and open');
+  // A generic dialog flag can still refer to the closing repair confirmation.
+  // Only the actual replacement command identifies a second user decision.
+  await until(async () => {
+    const s = await state();
+    return s.title.startsWith(title) || s.controls.some(c => c.name === 'Continue without a copy' && c.enabled);
+  }, 'Repair did not open a document or replacement confirmation');
+  if (!(await state()).title.startsWith(title)) await click('Continue without a copy');
+  await until(async () => (await state()).title.startsWith(title) && !(await state()).dialog, 'Repaired import did not load');
+  assert.equal((await state()).text, text);
+  assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), hash(original)), original);
+}
 async function check(name, action) { await action(); report.checks.push(name); console.log('PASS RECOVERY', name); }
 try {
   await check('legacy null tabs boot without losing text or metadata', async () => {
@@ -133,8 +148,7 @@ try {
     await click('Protect original and open repaired copy', true); await recovered();
     assert.equal((await state()).text, text); assert.equal((await state()).comments.length, 1);
     const id = hash(original);
-    const protectedOriginal = await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), id);
-    assert.equal(protectedOriginal, original);
+    assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), id), original);
     await until(async () => { const raw = await rawLatest(); return raw && JSON.parse(raw).blocks[0].format.tabStops.length === 128; }, 'Repaired recovery was not committed');
     await focusEditor(); await page.keyboard.press('Control+End'); await page.keyboard.insertText(' Edited after repair.');
     await until(async () => (await state()).text.endsWith(' Edited after repair.'), 'Recovered copy is not editable');
@@ -177,16 +191,16 @@ try {
     assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), hash(original)), original);
   });
   await check('Open and Repair imports a native copy through a real file chooser', async () => {
-    const original = fixture(excessive, 'Imported repair'); const path = output + '/import-repair.textspace'; await fs.writeFile(path, original);
-    await click('Recovery tab'); const chooser = page.waitForEvent('filechooser'); await click('Open and Repair'); await (await chooser).setFiles(path);
-    await until(async () => (await state()).dialog, 'Repair confirmation did not open');
-    await click('Protect original and open');
-    await until(async () => (await state()).title.startsWith('Imported repair') || (await state()).dialog, 'Repair did not proceed');
-    // A currently dirty document still uses the normal, explicit replacement confirmation.
-    if ((await state()).dialog) await click('Continue without a copy');
-    await until(async () => (await state()).title.startsWith('Imported repair'), 'Repaired import did not load');
-    assert.equal((await state()).text, text);
-    assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), hash(original)), original);
+    await repairFile(fixture(excessive, 'Imported repair'), 'Imported repair', 'import-repair.textspace');
+  });
+  await check('file repair retains the original UTF-8 BOM and bytes', async () => {
+    const original = '\uFEFF' + fixture(excessive, 'BOM original');
+    await repairFile(original, 'BOM original', 'bom-source.textspace');
+    await click('Protected Originals');
+    const saved = await download('Download original ' + hash(original).slice(0, 12), 'bom-retained.textspace', false, true);
+    assert.equal(saved.charCodeAt(0), 0xFEFF);
+    assert.deepEqual(Buffer.from(saved, 'utf8'), Buffer.from(original, 'utf8'));
+    await click('Close');
   });
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {

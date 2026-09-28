@@ -65,11 +65,11 @@ internal static class TabValidationBenchmark
             catch (InvalidDataException) { return false; }
         }
         var random = new Random(617);
-        var inputs = new List<ImmutableArray<TabStop>>
-        {
+        List<ImmutableArray<TabStop>> inputs =
+        [
             default, [], [new(double.NaN)], [new(4001)], [new(1), new(1.001)],
             [new(12), new(12, relativeToRightEdge: true)], [null!]
-        };
+        ];
         for (var n = 0; n < 300; n++)
         {
             var count = random.Next(0, 132);
