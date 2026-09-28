@@ -13,25 +13,30 @@ internal static class TabValidationBenchmark
 
     public static string Run()
     {
+        if (Environment.GetEnvironmentVariable("DOTNET_TieredCompilation") != "0"
+            || Environment.GetEnvironmentVariable("DOTNET_ReadyToRun") != "0")
+            throw new InvalidOperationException("Run this benchmark in a new process with DOTNET_TieredCompilation=0 and DOTNET_ReadyToRun=0. Application runtime settings are not changed.");
         VerifyEquivalentAcceptance();
         var measurements = new List<object>();
+        var inputIndex = 0;
         foreach (var count in new[] { 0, 1, 4, 8, 32, 128 })
         {
             var stops = Enumerable.Range(0, count)
                 .Select(i => new TabStop(i * 12, TabAlignment.Right, TabLeader.Dot)).ToImmutableArray();
             void Legacy() { for (var i = 0; i < Iterations; i++) PreviousValidate(stops); }
             void Current() { for (var i = 0; i < Iterations; i++) TabStopRules.Validate(stops); }
-            // Alternate measurement order by input to avoid assigning all cold
-            // process effects to one implementation. This is not an FPS benchmark.
             Result before, after;
-            if ((count & 1) == 0) { before = Measure(Legacy); after = Measure(Current); }
+            if ((inputIndex++ & 1) == 0) { before = Measure(Legacy); after = Measure(Current); }
             else { after = Measure(Current); before = Measure(Legacy); }
             measurements.Add(new { stops = count, before, after });
         }
         return JsonSerializer.Serialize(new
         {
             baselineCommit = "d6059e2112697baa9e69123de07c2959682710c8",
-            scope = "Tab validation only; initialized arrays; prior and current acceptance verified. No document load, JSON parsing, rendering or storage I/O is timed.",
+            scope = "Tab validation only; prior/current acceptance verified. No document load, JSON parsing, rendering or storage I/O is timed. Not an application-default runtime or browser benchmark.",
+            compilation = "Single-tier optimized JIT; ReadyToRun disabled for this measurement process only",
+            tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
+            readyToRun = Environment.GetEnvironmentVariable("DOTNET_ReadyToRun"),
             framework = RuntimeInformation.FrameworkDescription,
             os = RuntimeInformation.OSDescription,
             architecture = RuntimeInformation.ProcessArchitecture.ToString(),

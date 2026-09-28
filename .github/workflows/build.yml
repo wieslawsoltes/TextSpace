@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           dotnet build benchmarks/TextSpace.Performance -c Release
-          dotnet run --project benchmarks/TextSpace.Performance -c Release --no-build -- --tab-validation > artifacts/tests/tab-validation.json
+          DOTNET_TieredCompilation=0 DOTNET_ReadyToRun=0 dotnet run --project benchmarks/TextSpace.Performance -c Release --no-build -- --tab-validation > artifacts/tests/tab-validation.json
           cat artifacts/tests/tab-validation.json
       - uses: actions/upload-artifact@v4
         if: always()

@@ -196,7 +196,7 @@ try {
   await check('file repair retains the original UTF-8 BOM and bytes', async () => {
     const original = '\uFEFF' + fixture(excessive, 'BOM original');
     await repairFile(original, 'BOM original', 'bom-source.textspace');
-    await click('Protected Originals');
+    await click('Recovery tab'); await click('Protected Originals');
     const saved = await download('Download original ' + hash(original).slice(0, 12), 'bom-retained.textspace', false, true);
     assert.equal(saved.charCodeAt(0), 0xFEFF);
     assert.deepEqual(Buffer.from(saved, 'utf8'), Buffer.from(original, 'utf8'));
