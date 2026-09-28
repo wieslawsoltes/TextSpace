@@ -1,0 +1,29 @@
+name: Recovery diagnostics
+on:
+  push:
+    branches: [fix/recovery-tab-validation]
+    paths: [.github/workflows/recovery-diagnostic.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser-validation
+          run-id: 36438984981
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Read recovery fixture failure report
+        shell: python
+        run: |
+          import json,pathlib
+          root=pathlib.Path('evidence')
+          for path in root.rglob('report.json'):
+              report=json.loads(path.read_text())
+              if report.get('success') is False or 'recovery' in path.parts:
+                  print('REPORT',path)
+                  print(json.dumps(report,indent=2,ensure_ascii=False))
