@@ -19,6 +19,7 @@ public sealed record ParagraphFormat
     public bool KeepWithNext { get; init; }
     public bool KeepLinesTogether { get; init; }
     public bool WidowControl { get; init; } = true;
+    [System.Text.Json.Serialization.JsonConverter(typeof(TabStopArrayJsonConverter))]
     public System.Collections.Immutable.ImmutableArray<TabStop> TabStops { get; init; } = [];
     public bool PageBreakBefore { get; init; }
     public bool BorderBottom { get; init; }
