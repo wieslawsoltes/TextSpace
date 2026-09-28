@@ -1,0 +1,103 @@
+name: Inspect browser input
+on:
+  push:
+    branches: [feat/continuous-sections-performance]
+    paths: ['.github/workflows/inspect-browser-artifact.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/continuous-sections-performance
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser-validation
+          path: prior-report
+          run-id: 36404437933
+          github-token: ${{ github.token }}
+      - name: Inspect the actual failing report
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          for path in pathlib.Path('prior-report').rglob('report.json'):
+              if path.parent.name != 'typography': continue
+              report=json.loads(path.read_text())
+              print('REPORT',path)
+              print(json.dumps({k:report.get(k) for k in ('checks','failure','input','errors')},indent=2))
+              state=report.get('state') or {}
+              print('STATE',json.dumps({k:state.get(k) for k in ('title','text','status','dialog','selection','canvas')},indent=2))
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: TextSpace-browser
+          path: site
+          run-id: 36404437933
+          github-token: ${{ github.token }}
+      - name: Attach observation-only native input trace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('scripts/typography-check.mjs')
+          text=path.read_text()
+          probe='''
+          await page.addInitScript(() => {
+            const trace = [];
+            globalThis.__fileInputTrace = trace;
+            function record(kind, event = {}) {
+              const target = event.target;
+              trace.push({kind, time: performance.now(), key: event.key, ctrl: event.ctrlKey,
+                meta: event.metaKey, prevented: event.defaultPrevented, trusted: event.isTrusted,
+                target: target?.id || target?.tagName, type: target?.type,
+                active: document.activeElement?.id, focused: document.hasFocus(),
+                activated: navigator.userActivation?.isActive,
+                dialog: globalThis.__textSpaceState?.dialog,
+                status: globalThis.__textSpaceState?.status});
+              if (trace.length > 100) trace.shift();
+            }
+            for (const type of ['keydown','keyup','pointerdown','focusin','focusout'])
+              document.addEventListener(type, event => record(type,event), true);
+            document.addEventListener('click', event => { if(event.target?.type === 'file') record('file-click',event); }, true);
+            new MutationObserver(records => {
+              for (const change of records) for (const node of change.addedNodes)
+                if (node.nodeType === 1 && node.matches?.('input[type=file]')) record('file-added',{target:node});
+            }).observe(document, {childList:true,subtree:true});
+          });
+          '''
+          marker='const state = () => page.evaluate(() => globalThis.__textSpaceState);'
+          assert text.count(marker)==1
+          text=text.replace(marker,probe+'\n'+marker)
+          marker="report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;"
+          assert text.count(marker)==1
+          text=text.replace(marker,marker+"\n  console.log('INPUT TRACE', JSON.stringify(await page.evaluate(() => globalThis.__fileInputTrace)));\n  console.log('FAILURE STATE', JSON.stringify(await state().then(s => ({status:s.status,dialog:s.dialog,text:s.text,selection:s.selection}))));")
+          path.write_text(text)
+          PY
+      - name: Reproduce with original keyboard assertions
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          mkdir -p artifacts
+          python3 scripts/serve-site.py site --port 0 --ready-file artifacts/server-ready.json >/tmp/server.log 2>&1 &
+          SERVER=$!
+          trap 'kill "$SERVER" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do
+            kill -0 "$SERVER"
+            [ -f artifacts/server-ready.json ] && break
+            sleep 0.1
+          done
+          export TEXTSPACE_BASE_URL=$(node -e "console.log(require('./artifacts/server-ready.json').url)")
+          node scripts/typography-check.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TextSpace-input-diagnostics
+          path: test-results/typography
