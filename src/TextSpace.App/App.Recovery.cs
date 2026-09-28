@@ -101,14 +101,15 @@ public sealed partial class App
             void Publish()
             {
                 if (!ReferenceEquals(_window.Content, root)) { _recoveryTimer?.Stop(); return; }
-                var controls = new List<object>();
+                var controls = new List<RecoveryControlSnapshot>();
                 foreach (var button in actions.Children.OfType<OfficeButton>())
                 {
                     if (button.ActualWidth <= 0 || button.ActualHeight <= 0) continue;
                     var origin = button.TransformToVisual(root).TransformPoint(new Point());
-                    controls.Add(new { name = AutomationProperties.GetName(button), x = origin.X, y = origin.Y, width = button.ActualWidth, height = button.ActualHeight, enabled = button.IsEnabled });
+                    controls.Add(new(AutomationProperties.GetName(button), origin.X, origin.Y, button.ActualWidth, button.ActualHeight, button.IsEnabled));
                 }
-                BrowserRecoveryArchiveStore.PublishState(JsonSerializer.Serialize(new { active = true, canDownload = original is not null, repairPreviewed = plan is not null, message = status.Text, controls }));
+                var snapshot = new RecoveryUiSnapshot(true, original is not null, plan is not null, status.Text, controls);
+                BrowserRecoveryArchiveStore.PublishState(JsonSerializer.Serialize(snapshot, RecoveryWireContext.Default.RecoveryUiSnapshot));
             }
             _recoveryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _recoveryTimer.Tick += (_, _) => Publish(); _recoveryTimer.Start();

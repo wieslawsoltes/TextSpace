@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace TextSpace.Core;
 
@@ -18,13 +19,17 @@ public sealed class TabStopArrayJsonConverter : JsonConverter<ImmutableArray<Tab
         if (reader.TokenType == JsonTokenType.Null) return [];
         if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Tab stops must be an array or null.");
         ImmutableArray<TabStop>.Builder? result = null;
+        JsonTypeInfo<TabStop>? metadata = null;
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.EndArray) return result?.ToImmutable() ?? [];
             result ??= ImmutableArray.CreateBuilder<TabStop>();
             if (result.Count == TabStopRules.MaximumCount)
                 throw new InvalidDataException($"A paragraph supports at most {TabStopRules.MaximumCount} tab stops. Open and Repair can create a separate copy; the original must be preserved.");
-            var stop = JsonSerializer.Deserialize<TabStop>(ref reader, options);
+            // Resolve once per nonempty collection using the caller's generated
+            // contract. Do not fall back to reflection in a trimmed WASM build.
+            metadata ??= (JsonTypeInfo<TabStop>)options.GetTypeInfo(typeof(TabStop));
+            var stop = JsonSerializer.Deserialize(ref reader, metadata);
             if (stop is null) throw new InvalidDataException("A tab stop cannot be null.");
             result.Add(stop);
         }
@@ -34,10 +39,11 @@ public sealed class TabStopArrayJsonConverter : JsonConverter<ImmutableArray<Tab
     public override void Write(Utf8JsonWriter writer, ImmutableArray<TabStop> value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        // A default immutable collection has the same native representation as
-        // no custom stops. Direct model validation still diagnoses uninitialized state.
-        if (!value.IsDefault)
-            foreach (var stop in value) JsonSerializer.Serialize(writer, stop, options);
+        if (!value.IsDefaultOrEmpty)
+        {
+            var metadata = (JsonTypeInfo<TabStop>)options.GetTypeInfo(typeof(TabStop));
+            foreach (var stop in value) JsonSerializer.Serialize(writer, stop, metadata);
+        }
         writer.WriteEndArray();
     }
 }

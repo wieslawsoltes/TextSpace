@@ -30,7 +30,13 @@ internal sealed partial class BrowserRecoveryArchiveStore : IRecoveryArchiveStor
     }
 }
 
+// Closed diagnostic DTOs survive trimming without retaining unrelated application
+// metadata. They contain only UI state and geometry, never the original payload.
+internal sealed record RecoveryControlSnapshot(string Name, double X, double Y, double Width, double Height, bool Enabled);
+internal sealed record RecoveryUiSnapshot(bool Active, bool CanDownload, bool RepairPreviewed, string Message, List<RecoveryControlSnapshot> Controls);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RecoveryArchive))]
 [JsonSerializable(typeof(List<RecoveryArchive>))]
+[JsonSerializable(typeof(RecoveryUiSnapshot))]
 internal partial class RecoveryWireContext : JsonSerializerContext;
