@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
 const base = (process.env.TEXTSPACE_BASE_URL || 'http://127.0.0.1:4173/TextSpace/').replace(/\/?$/, '/');
 const output = 'test-results/recovery';
 await fs.mkdir(output, { recursive: true });
-const report = { base, checks: [], errors: [] };
+const report = { base, checks: [], errors: [], downloads: [] };
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 let context, page;
 const hash = text => createHash('sha256').update(text, 'utf8').digest('hex');
@@ -45,9 +45,7 @@ async function ready() {
   await until(async () => (await state())?.canvas.width > 200, 'Workbench is not laid out');
 }
 async function recovered() {
-  // The previous startup error remains while protection, font preparation and
-  // workbench construction run. Observe the completed transition instead of
-  // treating that old error as the result of a new asynchronous repair operation.
+  // Retained startup errors are not the result of the new asynchronous adoption.
   await page.waitForFunction(() => globalThis.__textSpaceState?.ready
     && !globalThis.__textSpaceError && !globalThis.__textSpaceRecoveryState?.active,
     null, { timeout: 150000 });
@@ -96,7 +94,14 @@ async function recoveryReady() {
 }
 async function download(label, filename, startup = false, prefix = false) {
   const pending = page.waitForEvent('download', { timeout: 30000 }); await click(label, startup, prefix);
-  const item = await pending; const path = output + '/' + filename; await item.saveAs(path); return fs.readFile(path, 'utf8');
+  const item = await pending; const path = output + '/' + filename; await item.saveAs(path);
+  const bytes = await fs.readFile(path);
+  // Original preservation is a byte contract. Keep the encoding marker as data
+  // in the secondary text check and record raw evidence alongside its identity.
+  const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  report.downloads.push({ file: filename, suggestedName: item.suggestedFilename(),
+    bytes: bytes.length, sha256: hash(bytes), prefix: [...bytes.subarray(0, 6)], firstCodeUnit: decoded.charCodeAt(0) });
+  return decoded;
 }
 async function focusEditor() {
   const { canvas } = await state(); await page.bringToFront();
@@ -109,8 +114,6 @@ async function repairFile(original, title, filename) {
   await click('Open and Repair'); await (await chooser).setFiles(path);
   await until(async () => (await state()).dialog, 'Repair confirmation did not open');
   await click('Protect original and open');
-  // A generic dialog flag can still refer to the closing repair confirmation.
-  // Only the actual replacement command identifies a second user decision.
   await until(async () => {
     const s = await state();
     return s.title.startsWith(title) || s.controls.some(c => c.name === 'Continue without a copy' && c.enabled);
@@ -161,8 +164,7 @@ try {
   await check('protected original downloads from the actual Recovery ribbon', async () => {
     const original = fixture(excessive), id = hash(original);
     await click('Recovery tab'); await click('Protected Originals');
-    const saved = await download('Download original ' + id.slice(0, 12), 'original-after-reload.textspace', false, true);
-    assert.equal(saved, original);
+    assert.equal(await download('Download original ' + id.slice(0, 12), 'original-after-reload.textspace', false, true), original);
     await click('Close');
   });
   await check('unrepairable JSON offers a protected blank rather than a startup loop', async () => {
@@ -198,6 +200,12 @@ try {
     await repairFile(original, 'BOM original', 'bom-source.textspace');
     await click('Recovery tab'); await click('Protected Originals');
     const saved = await download('Download original ' + hash(original).slice(0, 12), 'bom-retained.textspace', false, true);
+    const sourceBytes = await fs.readFile(output + '/bom-source.textspace');
+    const retainedBytes = await fs.readFile(output + '/bom-retained.textspace');
+    assert.deepEqual([...retainedBytes.subarray(0, 3)], [0xEF, 0xBB, 0xBF]);
+    assert.deepEqual(retainedBytes, sourceBytes);
+    assert.equal(hash(retainedBytes), hash(original));
+    assert.equal(report.downloads.at(-1).suggestedName, 'TextSpace-original-' + hash(original).slice(0, 12) + '.textspace');
     assert.equal(saved.charCodeAt(0), 0xFEFF);
     assert.deepEqual(Buffer.from(saved, 'utf8'), Buffer.from(original, 'utf8'));
     await click('Close');
@@ -210,6 +218,6 @@ try {
   await page?.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));
-  console.log('RECOVERY ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, failure: report.failure }));
+  console.log('RECOVERY ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, failure: report.failure, downloads: report.downloads }));
   await browser.close();
 }
