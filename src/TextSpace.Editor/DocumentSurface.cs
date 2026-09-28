@@ -20,6 +20,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private readonly DrawingCanvas _canvas = new();
     private readonly Grid _viewport = new();
     private readonly TextBox _input;
+    private readonly SessionTextProjection _inputText;
     private readonly PageRuler _ruler = new();
     private readonly OfficeScrollBar _vertical = new(), _horizontal = new(false);
     private readonly DispatcherTimer _caretTimer = new() { Interval = TimeSpan.FromMilliseconds(520) };
@@ -53,7 +54,11 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
 
     public DocumentSurface(EditorSession session)
     {
-        Session = session; _documentId = session.Document.Id; Layout = Renderer.Layout(session.Document);
+        Session = session; _documentId = session.Document.Id;
+        // Subscribe before presentation handlers so native capture sees invalidation
+        // synchronously, while rendering remains deferred until TextBox is stable.
+        _inputText = new SessionTextProjection(session);
+        Layout = Renderer.Layout(session.Document);
         _input = OfficeTheme.Field("Document text"); _input.AcceptsReturn = true; _input.TextWrapping = TextWrapping.NoWrap; _input.Width = 2; _input.Height = 24; _input.MinHeight = 0; _input.Padding = new(0); _input.BorderThickness = new(0); _input.Opacity = 0.01; _input.HorizontalAlignment = HorizontalAlignment.Left; _input.VerticalAlignment = VerticalAlignment.Top; _input.IsSpellCheckEnabled = false;
         // Capture the model synchronously, but never mutate the visual/input tree
         // until TextBox has finished its own text and selection update.
@@ -103,6 +108,8 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     public void Invalidate() => _canvas.Invalidate();
     public void Relayout()
     {
+        // Explicit public relayout is also an external-model refresh boundary.
+        _inputText.Invalidate();
         Layout = Renderer.Layout(Session.Document); ClampScroll(); UpdateRuler(); UpdateInputPosition(); Invalidate(); ViewChanged?.Invoke();
     }
     private void OnSessionChanged(object? sender, EditorChangedEventArgs e)
@@ -120,10 +127,10 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     private void SyncInput()
     {
-        if (_syncing || _nativeEdit) return; _syncing = true;
+        if (_syncing || _nativeEdit || _disposed) return; _syncing = true;
         try
         {
-            var text = Session.Document.PlainText; if (_input.Text != text) _input.Text = text;
+            var text = _inputText.Text; if (_input.Text != text) _input.Text = text;
             var selection = Session.Selection;
             _input.Select(selection.Start, selection.Length);
             _input.IsReadOnly = Session.IsReadOnly; UpdateInputPosition();
@@ -133,18 +140,18 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void OnNativeTextChanged(object sender, TextChangedEventArgs e) => CommitNativeInput();
     private void CommitNativeInput()
     {
-        if (_syncing || _nativeEdit || _ownsNativeInput) return;
-        var oldText = Session.Document.PlainText; var newText = _input.Text.Replace("\r\n", "\n").Replace('\r', '\n'); if (oldText == newText) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed) return;
+        var oldText = _inputText.Text; var newText = _input.Text.Replace("\r\n", "\n").Replace('\r', '\n'); if (oldText == newText) return;
         var prefix = 0; while (prefix < oldText.Length && prefix < newText.Length && oldText[prefix] == newText[prefix]) prefix++;
         var suffix = 0; while (suffix < oldText.Length - prefix && suffix < newText.Length - prefix && oldText[oldText.Length - 1 - suffix] == newText[newText.Length - 1 - suffix]) suffix++;
         _nativeEdit = true;
         try { Session.Replace(prefix, oldText.Length - prefix - suffix, newText.Substring(prefix, newText.Length - prefix - suffix)); }
         catch (Exception ex) { Error?.Invoke(ex.Message); }
-        finally { _nativeEdit = false; if (_input.Text != Session.Document.PlainText) QueueNativeViewRefresh(); }
+        finally { _nativeEdit = false; if (_input.Text != _inputText.Text) QueueNativeViewRefresh(); }
     }
     private void OnNativeSelectionChanged(object sender, RoutedEventArgs e)
     {
-        if (_syncing || _nativeEdit || _ownsNativeInput || _input.Text != Session.Document.PlainText) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed || _input.Text != _inputText.Text) return;
         var start = _input.SelectionStart; var end = start + _input.SelectionLength;
         if (Session.Selection.Start == start && Session.Selection.End == end) return;
         Session.SetSelection(start, end);
@@ -221,6 +228,6 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void Try(Action action) { try { action(); } catch (Exception ex) { Error?.Invoke(ex.Message); SyncInput(); } }
     public new void Dispose()
     {
-        if (_disposed) return; _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _input.PreviewKeyDown -= OnInputKeyDown; _input.PreviewKeyUp -= OnInputKeyUp; _canvas.Draw = null; Renderer.Dispose();
+        if (_disposed) return; _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _inputText.Dispose(); _input.PreviewKeyDown -= OnInputKeyDown; _input.PreviewKeyUp -= OnInputKeyUp; _canvas.Draw = null; Renderer.Dispose();
     }
 }
