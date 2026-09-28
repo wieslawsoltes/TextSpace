@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TextSpace.Core;
 
 /// <summary>Immutable character formatting. Font sizes and geometry use typographic points.</summary>
@@ -15,4 +17,17 @@ public sealed record TextStyle
     public string? Highlight { get; init; }
     public string? Hyperlink { get; init; }
     public double EffectiveSize => FontSize * (Superscript || Subscript ? 0.7 : 1);
+
+    public TextStyle() { }
+
+    [JsonConstructor]
+    public TextStyle(string fontFamily = "Aptos", double fontSize = 11, bool bold = false,
+        bool italic = false, bool underline = false, bool strikeThrough = false,
+        bool superscript = false, bool subscript = false, string color = "#202020",
+        string? highlight = null, string? hyperlink = null)
+    {
+        FontFamily = fontFamily; FontSize = fontSize; Bold = bold; Italic = italic;
+        Underline = underline; StrikeThrough = strikeThrough; Superscript = superscript;
+        Subscript = subscript; Color = color; Highlight = highlight; Hyperlink = hyperlink;
+    }
 }
