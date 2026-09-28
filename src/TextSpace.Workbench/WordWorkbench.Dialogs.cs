@@ -41,11 +41,12 @@ public sealed partial class WordWorkbench
         var before = dialog.AddField("Space before (points)", N(p.SpaceBefore)); var after = dialog.AddField("Space after (points)", N(p.SpaceAfter));
         var line = Choice(dialog, "Line spacing multiplier", ["1", "1.15", "1.5", "2", "2.5", "3"], N(p.LineSpacing));
         var keep = new OfficeCheckBox("Keep with next", p.KeepWithNext); var page = new OfficeCheckBox("Page break before", p.PageBreakBefore); dialog.Body.Children.Add(OfficeTheme.Row(keep, page));
+        var together = new OfficeCheckBox("Keep lines together", p.KeepLinesTogether); var widow = new OfficeCheckBox("Widow/orphan control", p.WidowControl); dialog.Body.Children.Add(OfficeTheme.Row(together, widow));
         if (!await ShowDialogAsync(dialog)) return;
         if (!Enum.TryParse<TextSpace.Core.TextAlignment>(alignment.Value, true, out var a)) throw new InvalidOperationException("Choose a valid alignment.");
         var l = ParseNumber(left.Text); var r = ParseNumber(right.Text); var f = ParseNumber(first.Text); var b = ParseNumber(before.Text); var af = ParseNumber(after.Text); var spacing = ParseNumber(line.Value);
         if (l < 0 || r < 0 || l + r > Session.CurrentSection.Page.ColumnWidth - 24 || b is < 0 or > 720 || af is < 0 or > 720 || spacing is < 0.5 or > 10 || f < -l || f > Session.CurrentSection.Page.ColumnWidth - l - r - 12) throw new InvalidOperationException("Paragraph geometry is outside the available page width or spacing limits.");
-        Session.FormatParagraph("Paragraph", format => format with { Alignment = a, LeftIndent = l, RightIndent = r, FirstLineIndent = f, SpaceBefore = b, SpaceAfter = af, LineSpacing = spacing, KeepWithNext = keep.IsChecked, PageBreakBefore = page.IsChecked });
+        Session.FormatParagraph("Paragraph", format => format with { Alignment = a, LeftIndent = l, RightIndent = r, FirstLineIndent = f, SpaceBefore = b, SpaceAfter = af, LineSpacing = spacing, KeepWithNext = keep.IsChecked, PageBreakBefore = page.IsChecked, KeepLinesTogether = together.IsChecked, WidowControl = widow.IsChecked });
     }
     private async Task PageSetupDialogAsync()
     {
@@ -153,7 +154,7 @@ public sealed partial class WordWorkbench
     private static readonly (string Label, string Id)[] SearchableCommands =
     [
         ("Open a document", "open"), ("New blank document", "new"), ("Save a complete copy", "save"), ("Export Word document", "export-docx"), ("Export PDF", "export-pdf"), ("Export HTML", "export-html"), ("Export plain text", "export-text"), ("Export current page as PNG", "export-png"), ("Print", "print"),
-        ("Section settings", "section-settings"), ("Insert a live field", "insert-field"), ("Update fields", "update-fields"), ("Manage fields", "manage-fields"), ("Insert cross-reference", "cross-reference"), ("Find text", "find"), ("Replace text", "replace"), ("Font settings", "font-dialog"), ("Paragraph settings", "paragraph-dialog"), ("Page setup", "page-setup"), ("Insert picture", "insert-picture"), ("Insert hyperlink", "link"), ("Insert table of contents", "toc"), ("New comment", "new-comment"), ("Track changes", "track"), ("Word count", "word-count"), ("Focus mode", "focus"), ("Zoom to page width", "page-width"), ("Keyboard shortcuts", "shortcuts")
+        ("Section settings", "section-settings"), ("Insert a live field", "insert-field"), ("Update fields", "update-fields"), ("Manage fields", "manage-fields"), ("Insert cross-reference", "cross-reference"), ("Find text", "find"), ("Replace text", "replace"), ("Font settings", "font-dialog"), ("Paragraph settings", "paragraph-dialog"), ("Tab stops and leaders", "tab-stops"), ("Line and page breaks", "pagination"), ("Page setup", "page-setup"), ("Insert picture", "insert-picture"), ("Insert hyperlink", "link"), ("Insert table of contents", "toc"), ("New comment", "new-comment"), ("Track changes", "track"), ("Word count", "word-count"), ("Focus mode", "focus"), ("Zoom to page width", "page-width"), ("Keyboard shortcuts", "shortcuts")
     ];
     private async Task CommandSearchAsync()
     {
@@ -185,7 +186,7 @@ public sealed partial class WordWorkbench
     {
         var dialog = new OfficeDialog("About TextSpace", "Close", 530);
         dialog.Body.Children.Add(OfficeTheme.Text("TextSpace", 30, OfficeTheme.Accent, true));
-        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.2.0-alpha.1.");
+        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.3.0-alpha.1.");
         dialog.AddDescription("Original office-style controls and reusable document libraries. Open-source font substitutes are included; Microsoft fonts and branding are not distributed.");
         dialog.AddDescription("TextSpace is not affiliated with Microsoft. Microsoft Word and Microsoft 365 are trademarks of Microsoft. Source code: MIT License.");
         dialog.AddDescription("Recovery storage: " + Host.StorageDescription + ". No document upload, account, analytics, or AI service is required."); await ShowDialogAsync(dialog);

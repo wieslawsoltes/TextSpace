@@ -1,0 +1,18 @@
+{
+  "framework": ".NET 10.0.12",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "drawCallsPerIteration": 1000,
+  "uniqueTextRuns": 100,
+  "original": {
+    "medianMs": 13.0663,
+    "medianAllocatedBytes": 1636040,
+    "iterations": 7
+  },
+  "cached": {
+    "medianMs": 5.5165,
+    "medianAllocatedBytes": 40,
+    "iterations": 7
+  },
+  "cacheEntries": 100,
+  "estimatedCacheBytes": 65020
+}

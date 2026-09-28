@@ -9,7 +9,7 @@ namespace TextSpace.Layout;
 /// </summary>
 public sealed class ParagraphLayoutCache
 {
-    private readonly record struct Key(string Id, double Width);
+    private readonly record struct Key(string Id, double Width, double TabInterval);
     private readonly record struct RunSnapshot(string Text, TextStyle Style);
     private sealed record Entry(Key Key, ParagraphFormat Format, TextStyle DefaultStyle,
         RunSnapshot[] Runs, List<LayoutLine> Lines, long EstimatedBytes);
@@ -35,14 +35,14 @@ public sealed class ParagraphLayoutCache
         _maximumEntries = maximumEntries; _maximumBytes = maximumBytes;
         _metricsVersion = ReadVersion();
     }
-    public List<LayoutLine> Layout(Paragraph paragraph, double width, int globalStart)
+    public List<LayoutLine> Layout(Paragraph paragraph, double width, int globalStart, double defaultTabStop = 36)
     {
         ArgumentNullException.ThrowIfNull(paragraph);
         if (!double.IsFinite(width) || width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
         ArgumentOutOfRangeException.ThrowIfNegative(globalStart);
         var version = ReadVersion();
         if (_metricsVersion != version) { Clear(); _metricsVersion = version; }
-        var key = new Key(paragraph.Id, width);
+        var key = new Key(paragraph.Id, width, defaultTabStop);
         if (_entries.TryGetValue(key, out var node))
         {
             if (Matches(node.Value, paragraph))
@@ -53,7 +53,7 @@ public sealed class ParagraphLayoutCache
             Remove(node);
         }
         Misses++;
-        var lines = _layouter.Layout(paragraph, width, 0);
+        var lines = _layouter.Layout(paragraph, width, 0, defaultTabStop);
         var runs = paragraph.Runs.Select(run => new RunSnapshot(run.Text, run.Style)).ToArray();
         var bytes = Estimate(paragraph.Id, runs, lines);
         if (_maximumEntries > 0 && bytes <= _maximumBytes)
@@ -84,8 +84,8 @@ public sealed class ParagraphLayoutCache
         foreach (var run in runs) bytes += run.Text.Length * 2L;
         foreach (var line in lines)
         {
-            bytes += 256;
-            foreach (var chunk in line.Chunks) bytes += 160L + chunk.Text.Length * 2L + chunk.Carets.Length * sizeof(double);
+            bytes += 256 + line.BarTabs.Length * sizeof(double);
+            foreach (var chunk in line.Chunks) bytes += 160L + chunk.Text.Length * 2L + (chunk.DisplayText?.Length ?? 0) * 2L + chunk.Carets.Length * sizeof(double);
         }
         return bytes;
     }
@@ -97,10 +97,10 @@ public sealed class ParagraphLayoutCache
             var chunks = new List<LayoutChunk>(line.Chunks.Count);
             foreach (var chunk in line.Chunks)
                 chunks.Add(new() { Text = chunk.Text, Style = chunk.Style, Start = checked(chunk.Start + globalStart),
-                    X = chunk.X, Width = chunk.Width, Carets = (double[])chunk.Carets.Clone() });
+                    X = chunk.X, Width = chunk.Width, Carets = (double[])chunk.Carets.Clone(), TabLeader = chunk.TabLeader, DisplayText = chunk.DisplayText });
             result.Add(new() { ParagraphId = line.ParagraphId, Start = checked(line.Start + globalStart), End = checked(line.End + globalStart),
                 PageIndex = line.PageIndex, X = line.X, Y = line.Y, Width = line.Width, Height = line.Height, Ascent = line.Ascent,
-                LastInParagraph = line.LastInParagraph, Marker = line.Marker, Format = line.Format, DefaultStyle = line.DefaultStyle, Chunks = chunks });
+                LastInParagraph = line.LastInParagraph, Marker = line.Marker, Format = line.Format, DefaultStyle = line.DefaultStyle, Chunks = chunks, BarTabs = (double[])line.BarTabs.Clone() });
         }
         return result;
     }

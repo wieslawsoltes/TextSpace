@@ -7,7 +7,7 @@ using TextSpace.Layout;
 namespace TextSpace.Skia;
 
 /// <summary>Single-threaded font/shaper cache. Hosts can register openly licensed or user-provided typefaces.</summary>
-public sealed class SkiaTextMetrics : IVersionedTextMetrics, IDisposable
+public sealed partial class SkiaTextMetrics : IVersionedTextMetrics, IDisposable
 {
     private readonly Dictionary<(string Family, bool Bold, bool Italic), SKTypeface> _faces = [];
     private readonly Dictionary<(string Family, bool Bold, bool Italic), SKShaper> _shapers = [];
@@ -24,6 +24,7 @@ public sealed class SkiaTextMetrics : IVersionedTextMetrics, IDisposable
     public void ClearMeasurements()
     {
         MetricsVersion++;
+        ClearShapedText();
         foreach (var cachedShaper in _shapers.Values) cachedShaper.Dispose();
         _shapers.Clear();
         _measurements.Clear(); foreach (var font in _fonts.Values) font.Dispose(); _fonts.Clear();
@@ -70,10 +71,11 @@ public sealed class SkiaTextMetrics : IVersionedTextMetrics, IDisposable
     {
         if (text.Length == 0 || text == "\t" || text == "\u2028") return;
         var shift = style.Superscript ? -style.FontSize * 0.32 : style.Subscript ? style.FontSize * 0.18 : 0;
-        canvas.DrawShapedText(Shaper(style), text, (float)x, (float)(baseline + shift), SKTextAlign.Left, Font(style), paint);
+        DrawCachedText(canvas, text, x, baseline + shift, style, paint);
     }
     public void Dispose()
     {
+        ClearShapedText();
         foreach (var shaper in _shapers.Values) shaper.Dispose(); foreach (var font in _fonts.Values) font.Dispose(); foreach (var face in _owned) face.Dispose();
         _shapers.Clear(); _fonts.Clear(); _faces.Clear(); _owned.Clear(); _measurements.Clear();
     }

@@ -13,6 +13,7 @@ public sealed class DocumentModel
     public DateTimeOffset Created { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset Modified { get; set; } = DateTimeOffset.UtcNow;
     public PageSettings Page { get; set; } = new();
+    public double DefaultTabStop { get; set; } = 36;
     public string Header { get; set; } = "";
     public string Footer { get; set; } = "";
     public List<Block> Blocks { get; set; } = [new Paragraph()];

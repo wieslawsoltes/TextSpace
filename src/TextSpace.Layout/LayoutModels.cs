@@ -18,6 +18,8 @@ public sealed class LayoutChunk
     public double X { get; set; }
     public double Width { get; set; }
     public double[] Carets { get; init; } = [0];
+    public TabLeader TabLeader { get; init; }
+    public string? DisplayText { get; init; }
     private int[]? _boundaries;
     internal ReadOnlySpan<int> CaretOffsets
     {
@@ -50,6 +52,7 @@ public sealed class LayoutLine
     public ParagraphFormat Format { get; init; } = new();
     public TextStyle DefaultStyle { get; init; } = new();
     public List<LayoutChunk> Chunks { get; init; } = [];
+    public double[] BarTabs { get; init; } = [];
     public double CaretX(int position)
     {
         if (Chunks.Count == 0) return X;

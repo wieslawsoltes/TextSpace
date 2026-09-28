@@ -12,7 +12,7 @@ public sealed partial class DocumentSurface
             or VirtualKey.A or VirtualKey.S or VirtualKey.O or VirtualKey.N or VirtualKey.P
             or VirtualKey.F or VirtualKey.H or VirtualKey.K or VirtualKey.E or VirtualKey.L
             or VirtualKey.R or VirtualKey.J or VirtualKey.Enter or VirtualKey.Home or VirtualKey.End
-            or VirtualKey.Left or VirtualKey.Right or VirtualKey.Back or VirtualKey.Delete
+            or VirtualKey.Left or VirtualKey.Right or VirtualKey.Back or VirtualKey.Delete or VirtualKey.Tab
         : key is VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right
             or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown
             or VirtualKey.Back or VirtualKey.Delete or VirtualKey.Tab or VirtualKey.Enter or VirtualKey.Escape or VirtualKey.F9;
@@ -64,6 +64,7 @@ public sealed partial class DocumentSurface
                     case VirtualKey.L: Session.FormatParagraph("Align left", p => p with { Alignment = TextSpace.Core.TextAlignment.Left }); break;
                     case VirtualKey.R: Session.FormatParagraph("Align right", p => p with { Alignment = TextSpace.Core.TextAlignment.Right }); break;
                     case VirtualKey.J: Session.FormatParagraph("Justify", p => p with { Alignment = TextSpace.Core.TextAlignment.Justify }); break;
+                    case VirtualKey.Tab: Session.InsertText("\t"); break;
                     case VirtualKey.Enter: Session.InsertPageBreak(); break;
                     case VirtualKey.Home: Move(0); break;
                     case VirtualKey.End: Move(index.Length); break;

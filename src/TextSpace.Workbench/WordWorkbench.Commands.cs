@@ -25,6 +25,8 @@ public sealed partial class WordWorkbench
         {
             switch (id)
             {
+                case "tab-stops": await TabStopsAsync(); break;
+                case "pagination": await PaginationAsync(); break;
                 case "undo": Session.Undo(); break;
                 case "redo": Session.Redo(); break;
                 case "bold": Session.ToggleBold(); break;

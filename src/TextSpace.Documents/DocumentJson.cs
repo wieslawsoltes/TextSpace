@@ -21,6 +21,8 @@ public static partial class DocumentJson
         if (document.FormatVersion != 1) throw new InvalidDataException("Unsupported TextSpace document version.");
         if (document.Blocks is null || document.Comments is null || document.Changes is null || document.Bookmarks is null || document.Page is null) throw new InvalidDataException("Missing document structure.");
         ValidateSections(document);
+        if (!double.IsFinite(document.DefaultTabStop) || document.DefaultTabStop is < 1 or > 720)
+            throw new InvalidDataException("The default tab interval must be between 1 and 720 points.");
         var page = document.Page;
         if (!double.IsFinite(page.Width + page.Height + page.MarginTop + page.MarginBottom + page.MarginLeft + page.MarginRight + page.ColumnGap) || page.Width is < 144 or > 4000 || page.Height is < 144 or > 4000 || page.MarginLeft < 0 || page.MarginRight < 0 || page.MarginTop < 0 || page.MarginBottom < 0 || page.ContentHeight < 36 || page.ContentWidth < 36 || page.Columns is < 1 or > 3 || page.ColumnWidth < 24) throw new InvalidDataException("Invalid page geometry.");
         var count = 0; var chars = 0; long images = 0; var ids = new HashSet<string>();
@@ -36,6 +38,7 @@ public static partial class DocumentJson
                     case Paragraph p:
                         if (p.Runs is null || p.Format is null || p.DefaultStyle is null) throw new InvalidDataException("Invalid paragraph.");
                         if (!double.IsFinite(p.Format.LineSpacing + p.Format.LeftIndent + p.Format.RightIndent + p.Format.SpaceBefore + p.Format.SpaceAfter) || p.Format.LineSpacing is < 0.5 or > 10 || Math.Abs(p.Format.LeftIndent) > 2000 || Math.Abs(p.Format.RightIndent) > 2000) throw new InvalidDataException("Invalid paragraph geometry.");
+                        ValidateTypography(p.Format);
                         foreach (var run in p.Runs)
                         {
                             if (run.Text is null || run.Style is null || !double.IsFinite(run.Style.FontSize) || run.Style.FontSize is < 1 or > 400) throw new InvalidDataException("Invalid text formatting.");

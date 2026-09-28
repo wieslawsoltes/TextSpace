@@ -35,25 +35,67 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
         {
             line.PageIndex = page.Index; line.X += x; line.Y = lineY;
             foreach (var chunk in line.Chunks) chunk.X += x;
+            for (var i = 0; i < line.BarTabs.Length; i++) line.BarTabs[i] += x;
             page.Lines.Add(line);
         }
-        void Paragraph(Paragraph paragraph)
+        void Paragraph(Paragraph paragraph, int blockIndex)
         {
-            if (paragraph.Format.PageBreakBefore && (y > settings.MarginTop || column > 0)) Next(true);
-            var lines = layouter.Layout(paragraph, settings.ColumnWidth, index.StartOf(paragraph));
-            var before = Math.Max(0, paragraph.Format.SpaceBefore);
-            var keepHeight = lines.Take(Math.Min(2, lines.Count)).Sum(l => l.Height) + before;
-            if (paragraph.Format.KeepWithNext) keepHeight = Math.Min(settings.ContentHeight, lines.Sum(l => l.Height) + before + paragraph.Format.SpaceAfter + 18);
-            Ensure(keepHeight); y += before;
-            if (paragraph.Format.List == ListKind.Number) number++; else if (paragraph.Format.List == ListKind.None) number = 0;
-            for (var i = 0; i < lines.Count; i++)
+            var format = paragraph.Format;
+            if (format.PageBreakBefore && (y > settings.MarginTop || column > 0)) Next(true);
+            var lines = layouter.Layout(paragraph, settings.ColumnWidth, index.StartOf(paragraph), document.DefaultTabStop);
+            var before = Math.Max(0, format.SpaceBefore);
+            var headCount = format.WidowControl ? Math.Min(2, lines.Count) : 1;
+            var headHeight = lines.Take(headCount).Sum(l => l.Height);
+            var paragraphHeight = lines.Sum(l => l.Height);
+            var required = before + headHeight;
+            if (format.KeepLinesTogether && before + paragraphHeight <= settings.ContentHeight) required = before + paragraphHeight;
+            if (format.KeepWithNext)
             {
-                if (i == lines.Count - 2) Ensure(lines[i].Height + lines[i + 1].Height);
-                Ensure(lines[i].Height);
-                if (i == 0 && paragraph.Format.List != ListKind.None) lines[i].Marker = paragraph.Format.List == ListKind.Bullet ? "•" : number + ".";
-                Place(lines[i], Left(), y); y += lines[i].Height;
+                var chain = before + paragraphHeight; var previous = paragraph;
+                for (var next = blockIndex + 1; next < document.Blocks.Count && previous.Format.KeepWithNext; next++)
+                {
+                    if (document.Blocks[next] is not Paragraph following || following.Format.PageBreakBefore) break;
+                    var followingLines = layouter.Layout(following, settings.ColumnWidth, index.StartOf(following), document.DefaultTabStop);
+                    var whole = following.Format.KeepLinesTogether || following.Format.KeepWithNext;
+                    chain += Math.Max(0, previous.Format.SpaceAfter) + Math.Max(0, following.Format.SpaceBefore)
+                        + (whole ? followingLines.Sum(l => l.Height) : followingLines.Take(following.Format.WidowControl ? 2 : 1).Sum(l => l.Height));
+                    previous = following;
+                    if (chain > settings.ContentHeight) break;
+                }
+                // Over-height keep chains must degrade rather than loop or create empty pages.
+                if (chain <= settings.ContentHeight) required = Math.Max(required, chain);
             }
-            y += Math.Max(0, paragraph.Format.SpaceAfter);
+            Ensure(required); y += before;
+            if (format.List == ListKind.Number) number++; else if (format.List == ListKind.None) number = 0;
+            var at = 0;
+            while (at < lines.Count)
+            {
+                var capacity = settings.Height - settings.MarginBottom - y;
+                var fit = 0; var height = 0d;
+                while (at + fit < lines.Count && height + lines[at + fit].Height <= capacity + 0.0001) height += lines[at + fit++].Height;
+                if (fit == 0)
+                {
+                    if (y > settings.MarginTop + 0.0001) { Next(); continue; }
+                    fit = 1; // A single oversized line cannot satisfy the page geometry, but must make progress.
+                }
+                if (format.WidowControl && at + fit < lines.Count)
+                {
+                    if (at == 0 && fit == 1 && headHeight <= settings.ContentHeight && y > settings.MarginTop + 0.0001) { Next(); continue; }
+                    if (lines.Count - at - fit == 1 && fit > 1)
+                    {
+                        if (at == 0 && fit == 2 && paragraphHeight <= settings.ContentHeight && y > settings.MarginTop + 0.0001) { Next(); continue; }
+                        if (fit > 2 || at > 0) fit--;
+                    }
+                }
+                for (var i = 0; i < fit; i++)
+                {
+                    var line = lines[at];
+                    if (at == 0 && format.List != ListKind.None) line.Marker = format.List == ListKind.Bullet ? "•" : number + ".";
+                    Place(line, Left(), y); y += line.Height; at++;
+                }
+                if (at < lines.Count) Next();
+            }
+            y += Math.Max(0, format.SpaceAfter);
         }
         void Table(TableBlock table)
         {
@@ -69,7 +111,7 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
                     foreach (var p in DocumentModel.Walk(row.Cells[c].Blocks))
                     {
                         cellY += Math.Max(0, p.Format.SpaceBefore);
-                        var lines = layouter.Layout(p, Math.Max(12, widths[c] - 2 * table.CellPadding), index.StartOf(p));
+                        var lines = layouter.Layout(p, Math.Max(12, widths[c] - 2 * table.CellPadding), index.StartOf(p), document.DefaultTabStop);
                         foreach (var line in lines) { cellLines.Add((line, cellX + table.CellPadding, cellY)); cellY += line.Height; }
                         cellY += Math.Max(0, p.Format.SpaceAfter);
                     }
@@ -98,11 +140,12 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
             y += 8;
         }
         void BreakMarker(string label) => page.Breaks.Add(new(label, Left(), Math.Min(y, settings.Height - settings.MarginBottom), settings.ColumnWidth));
-        foreach (var block in document.Blocks)
+        for (var blockIndex = 0; blockIndex < document.Blocks.Count; blockIndex++)
         {
+            var block = document.Blocks[blockIndex];
             switch (block)
             {
-                case Paragraph p: Paragraph(p); break;
+                case Paragraph p: Paragraph(p, blockIndex); break;
                 case TableBlock table: Table(table); break;
                 case PageBreakBlock: BreakMarker("Page Break"); Next(true); break;
                 case ColumnBreakBlock: BreakMarker("Column Break"); Next(); break;

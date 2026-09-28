@@ -24,7 +24,7 @@ public sealed partial class DocxWriter
     }
     private XElement WriteParagraph(Paragraph paragraph)
     {
-        var result = E("p", ParagraphProperties(paragraph.Format)); var start = _index.StartOf(paragraph); var position = 0;
+        var result = E("p", ParagraphProperties(paragraph.Format, columnWidth: _availableTableWidth)); var start = _index.StartOf(paragraph); var position = 0;
         static bool Locked(DocumentField field)
         {
             try { return field.Locked || !FieldInstruction.Parse(field.Instruction).Supported; }
@@ -72,7 +72,11 @@ public sealed partial class DocxWriter
     {
         var result = E("r", RunProperties(style)); var buffer = new StringBuilder();
         void Flush() { if (buffer.Length > 0) { result.Add(E("t", new XAttribute(XNamespace.Xml + "space", "preserve"), buffer.ToString())); buffer.Clear(); } }
-        foreach (var c in text) { if (c is '\t' or '\u2028') { Flush(); result.Add(E(c == '\t' ? "tab" : "br")); } else buffer.Append(c); }
+        foreach (var c in text)
+        {
+            var element = c switch { '\t' => "tab", '\u2028' => "br", '\u00ad' => "softHyphen", '\u2011' => "noBreakHyphen", _ => null };
+            if (element is null) buffer.Append(c); else { Flush(); result.Add(E(element)); }
+        }
         Flush(); return result;
     }
     internal static XElement RunProperties(TextStyle s) => E("rPr",
@@ -82,12 +86,14 @@ public sealed partial class DocxWriter
         s.Underline || s.Hyperlink is not null ? E("u", V("single")) : null,
         s.Highlight is not null ? E("shd", V("clear"), new XAttribute(W + "fill", Hex(s.Highlight))) : null,
         s.Superscript || s.Subscript ? E("vertAlign", V(s.Superscript ? "superscript" : "subscript")) : null);
-    internal static XElement ParagraphProperties(ParagraphFormat f, bool includeStyle = true) => E("pPr",
+    internal static XElement ParagraphProperties(ParagraphFormat f, bool includeStyle = true, double columnWidth = 468) => E("pPr",
         includeStyle ? E("pStyle", V(f.StyleName.Replace(" ", ""))) : null,
-        f.KeepWithNext ? E("keepNext") : null, f.PageBreakBefore ? E("pageBreakBefore") : null,
+        E("keepNext", V(f.KeepWithNext ? "true" : "false")), E("keepLines", V(f.KeepLinesTogether ? "true" : "false")),
+        E("pageBreakBefore", V(f.PageBreakBefore ? "true" : "false")), E("widowControl", V(f.WidowControl ? "true" : "false")),
         f.List != ListKind.None ? E("numPr", E("ilvl", V(f.ListLevel)), E("numId", V(f.List == ListKind.Bullet ? 1 : 2))) : null,
         f.BorderBottom ? E("pBdr", E("bottom", V("single"), new XAttribute(W + "sz", 4), new XAttribute(W + "color", "8E9EAD"))) : null,
         f.Shading is not null ? E("shd", V("clear"), new XAttribute(W + "fill", Hex(f.Shading))) : null,
+        WriteTabs(f, columnWidth),
         E("spacing", new XAttribute(W + "before", Twips(f.SpaceBefore)), new XAttribute(W + "after", Twips(f.SpaceAfter)), new XAttribute(W + "line", (int)Math.Round(f.LineSpacing * 240)), new XAttribute(W + "lineRule", "auto")),
         E("ind", new XAttribute(W + "left", Twips(f.LeftIndent + (f.List != ListKind.None ? 18 : 0))), new XAttribute(W + "right", Twips(f.RightIndent)), f.FirstLineIndent >= 0 ? new XAttribute(W + "firstLine", Twips(f.FirstLineIndent)) : new XAttribute(W + "hanging", Twips(-f.FirstLineIndent))),
         E("jc", V(f.Alignment == TextAlignment.Justify ? "both" : f.Alignment.ToString().ToLowerInvariant())), f.OutlineLevel > 0 ? E("outlineLvl", V(f.OutlineLevel - 1)) : null);
