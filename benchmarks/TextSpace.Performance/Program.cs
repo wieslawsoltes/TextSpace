@@ -5,6 +5,8 @@ using TextSpace.Core;
 using TextSpace.Layout;
 using TextSpace.Skia;
 
+if (args.Contains("--tab-validation")) { Console.WriteLine(TabValidationBenchmark.Run()); return; }
+
 if (args.Contains("--interaction")) { Console.WriteLine(InteractionBenchmark.Run()); return; }
 
 if (args.Contains("--table-edit")) { Console.WriteLine(TableEditingBenchmark.Run(args.LastOrDefault() ?? "unknown")); return; }

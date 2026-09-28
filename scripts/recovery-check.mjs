@@ -44,6 +44,17 @@ async function ready() {
   assert.equal(await page.evaluate(() => globalThis.__textSpaceError ?? null), null);
   await until(async () => (await state())?.canvas.width > 200, 'Workbench is not laid out');
 }
+async function recovered() {
+  // Recovery starts with an intentionally retained startup error. Protection,
+  // font preparation and workbench construction are asynchronous. The old error
+  // is not evidence that the new operation has completed or failed. Observe the
+  // successful transition; do not clear error/state or invoke a hidden command.
+  await page.waitForFunction(() => globalThis.__textSpaceState?.ready
+    && !globalThis.__textSpaceError && !globalThis.__textSpaceRecoveryState?.active,
+    null, { timeout: 150000 });
+  await ready();
+  assert.equal(await recovery(), undefined, 'Recovery center must close after successful adoption');
+}
 async function initial() {
   if (context) await context.close();
   context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
@@ -119,7 +130,7 @@ try {
   });
   await check('adopting repair commits a checksum-verified original before AutoSave', async () => {
     const original = fixture(excessive);
-    await click('Protect original and open repaired copy', true); await ready();
+    await click('Protect original and open repaired copy', true); await recovered();
     assert.equal((await state()).text, text); assert.equal((await state()).comments.length, 1);
     const id = hash(original);
     const protectedOriginal = await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), id);
@@ -144,7 +155,7 @@ try {
     await initial(); const original = '{this JSON is broken but belongs to the user'; await seed(original); await recoveryReady();
     await click('Preview tab-stop repair', true);
     assert.equal(await rawLatest(), original); assert.equal((await recovery()).repairPreviewed, false);
-    await click('Protect original and start blank', true); await ready();
+    await click('Protect original and start blank', true); await recovered();
     assert.equal((await state()).text, '');
     assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), hash(original)), original);
   });
@@ -161,7 +172,7 @@ try {
   await check('earlier valid snapshot restores only after protecting current corruption', async () => {
     await initial(); const original = fixture(excessive), prior = fixture([], 'Earlier document', 'Earlier valid text');
     await seed(original, [], prior); await recoveryReady(); await click('Show previous recovery versions', true);
-    await click('Restore Previous valid version', true, true); await ready();
+    await click('Restore Previous valid version', true, true); await recovered();
     assert.ok((await state()).text.startsWith('Earlier valid text'));
     assert.equal(await page.evaluate(id => globalThis.TextSpaceRecovery.read(id), hash(original)), original);
   });
@@ -181,6 +192,7 @@ try {
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;
   report.state = await state().catch(() => null); report.recovery = await recovery().catch(() => null);
+  report.startupError = await page?.evaluate(() => globalThis.__textSpaceError ?? null).catch(() => null);
   await page?.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));

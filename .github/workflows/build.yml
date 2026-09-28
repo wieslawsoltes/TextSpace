@@ -22,6 +22,13 @@ jobs:
         run: python3 -m unittest discover -s tests/build
       - name: Test engine and interchange
         run: dotnet test tests/TextSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
+      - name: Record tab-validation CPU and allocation samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build benchmarks/TextSpace.Performance -c Release
+          dotnet run --project benchmarks/TextSpace.Performance -c Release --no-build -- --tab-validation > artifacts/tests/tab-validation.json
+          cat artifacts/tests/tab-validation.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
