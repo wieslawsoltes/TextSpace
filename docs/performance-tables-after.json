@@ -1,0 +1,59 @@
+{
+  "label": "table-grid-indexed",
+  "framework": ".NET 10.0.12",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "architecture": "X64",
+  "normalizationParagraphs": 4000,
+  "normalizationRunsPerParagraph": 4,
+  "tableRows": 100,
+  "tableColumns": 16,
+  "bookmarks": 1601,
+  "normalize": {
+    "medianMs": 0.6962,
+    "medianAllocatedBytes": 40,
+    "elapsedMs": [
+      0.7032,
+      0.9296,
+      0.6962,
+      0.6756,
+      0.6714,
+      0.6485,
+      0.7346
+    ],
+    "allocatedBytes": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "warmups": 3,
+    "measurements": 7
+  },
+  "insertColumnAndUndo": {
+    "medianMs": 78.7507,
+    "medianAllocatedBytes": 23172504,
+    "elapsedMs": [
+      64.4649,
+      114.9077,
+      86.217,
+      78.7507,
+      77.0451,
+      67.3436,
+      84.443
+    ],
+    "allocatedBytes": [
+      23170592,
+      23170088,
+      23175520,
+      23172504,
+      23175504,
+      23170592,
+      23177944
+    ],
+    "warmups": 3,
+    "measurements": 7
+  }
+}

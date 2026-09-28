@@ -36,6 +36,13 @@ public sealed class Paragraph : Block
     }
     public void Normalize()
     {
+        // Validation runs after every transaction. Do not rebuild already canonical
+        // run lists, which account for most paragraphs in a long document.
+        var canonical = true;
+        for (var i = 0; i < Runs.Count; i++)
+            if (Runs[i].Text.Length == 0 || i > 0 && Runs[i - 1].Style == Runs[i].Style)
+            { canonical = false; break; }
+        if (canonical) return;
         var normalized = new List<TextRun>();
         foreach (var run in Runs.Where(r => r.Text.Length > 0))
         {

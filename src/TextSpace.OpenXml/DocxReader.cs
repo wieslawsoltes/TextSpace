@@ -176,24 +176,6 @@ public sealed partial class DocxReader
         if (fieldStack.Count > 0) Warn("An unclosed field was imported as visible cached text.");
         paragraph.Normalize(); _textPosition += paragraph.Length + 1; return paragraph;
     }
-    private TableBlock ReadTable(XElement element)
-    {
-        var table = new TableBlock { Rows = [], BandedRows = false, HeaderRow = false, ColumnWidths = element.Element(W + "tblGrid")?.Elements(W + "gridCol").Select(c => Number((string?)c.Attribute(W + "w"), 1)).ToList() ?? [] };
-        if (element.Descendants(W + "vMerge").Any() || element.Descendants(W + "gridSpan").Any()) Warn("Merged table cells are normalized to independent cells.");
-        foreach (var rowElement in element.Elements(W + "tr"))
-        {
-            var row = new TableRow(); if (table.Rows.Count == 0) table.HeaderRow = rowElement.Element(W + "trPr")?.Element(W + "tblHeader") is not null;
-            foreach (var cellElement in rowElement.Elements(W + "tc"))
-            {
-                var blocks = ReadBlocks(cellElement).ToList(); if (blocks.Count == 0) { blocks.Add(new Paragraph()); _textPosition++; }
-                if (blocks.Any(b => b is TableBlock)) Warn("Nested tables retain their structure but their inner layout is simplified.");
-                var fill = (string?)cellElement.Element(W + "tcPr")?.Element(W + "shd")?.Attribute(W + "fill");
-                row.Cells.Add(new() { Blocks = blocks, Shading = fill is { Length: 6 } && fill.All(Uri.IsHexDigit) ? "#" + fill : null });
-            }
-            if (row.Cells.Count > 0) table.Rows.Add(row);
-        }
-        if (table.Rows.Count == 0) return TableBlock.Create(1, 1); return table;
-    }
     private ImageBlock? ReadPicture(XElement drawing)
     {
         var blip = drawing.Descendants(A + "blip").FirstOrDefault(); var id = (string?)blip?.Attribute(R + "embed");

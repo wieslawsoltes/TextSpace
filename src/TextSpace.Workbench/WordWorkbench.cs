@@ -46,7 +46,7 @@ public sealed partial class WordWorkbench : UserControl, IDisposable
         FontFamily = OfficeTheme.Font; RequestedTheme = ElementTheme.Light;
         _workspace.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); _workspace.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); _workspace.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         Grid.SetColumn(_navigationHost, 0); Grid.SetColumn(Surface, 1); Grid.SetColumn(_reviewHost, 2); _workspace.Children.Add(_navigationHost); _workspace.Children.Add(Surface); _workspace.Children.Add(_reviewHost);
-        _titleBar = CreateTitleBar(); ConfigureRibbon(); InitializeDocumentNavigation(); InitializeSectionsAndFields(); InitializeTypography();
+        _titleBar = CreateTitleBar(); ConfigureRibbon(); InitializeDocumentNavigation(); InitializeSectionsAndFields(); InitializeTypography(); InitializeTableTools();
         _noticeText.TextWrapping = TextWrapping.Wrap; var dismiss = new RibbonButton("close", "Dismiss notification", () => _notice.Visibility = Visibility.Collapsed);
         _notice.Child = OfficeTheme.Columns((_noticeText, -1), (dismiss, 26)); _notice.Background = OfficeTheme.Brush("#FFF4CE"); _notice.Padding = new(16, 5, 10, 5);
         var main = OfficeTheme.Rows((_titleBar, 42), (Ribbon, 0), (_notice, 0), (_workspace, -1), (CreateStatusBar(), 25));

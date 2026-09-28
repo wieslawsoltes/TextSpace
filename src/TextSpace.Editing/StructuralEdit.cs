@@ -25,20 +25,35 @@ public sealed partial class EditorSession
             mutation();
             var next = Index;
             var surviving = next.Paragraphs.ToDictionary(a => a.Paragraph.Id, StringComparer.Ordinal);
+            // Resolve surviving identities and nearest fallbacks once. Range remapping
+            // is O(log paragraphCount), not a linear search for every review/bookmark endpoint.
+            var mapped = addresses.Select(a => surviving.GetValueOrDefault(a.Id)).ToArray();
+            var following = new int[addresses.Length]; var preceding = new int[addresses.Length];
+            var nextStart = -1; var previousEnd = 0;
+            for (var i = addresses.Length - 1; i >= 0; i--)
+            {
+                following[i] = nextStart;
+                if (mapped[i] is { } item) nextStart = item.Start;
+            }
+            for (var i = 0; i < addresses.Length; i++)
+            {
+                preceding[i] = previousEnd;
+                if (mapped[i] is { } item) previousEnd = item.End;
+            }
             int Map(int position)
             {
                 position = Math.Clamp(position, 0, oldIndex.Length);
-                var at = Array.FindIndex(addresses, a => position <= a.End);
-                if (at < 0) at = addresses.Length - 1;
+                var low = 0; var high = addresses.Length;
+                while (low < high)
+                {
+                    var middle = low + (high - low) / 2;
+                    if (addresses[middle].End < position) low = middle + 1; else high = middle;
+                }
+                var at = Math.Min(low, addresses.Length - 1);
                 if (at < 0) return 0;
-                var address = addresses[at];
-                if (surviving.TryGetValue(address.Id, out var same))
-                    return same.Start + Math.Clamp(position - address.Start, 0, same.Paragraph.Length);
-                for (var i = at + 1; i < addresses.Length; i++)
-                    if (surviving.TryGetValue(addresses[i].Id, out var after)) return after.Start;
-                for (var i = at - 1; i >= 0; i--)
-                    if (surviving.TryGetValue(addresses[i].Id, out var before)) return before.End;
-                return 0;
+                if (mapped[at] is { } same)
+                    return same.Start + Math.Clamp(position - addresses[at].Start, 0, same.End - same.Start);
+                return following[at] >= 0 ? following[at] : preceding[at];
             }
             foreach (var anchor in fields)
             {

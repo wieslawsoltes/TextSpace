@@ -99,42 +99,41 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
         }
         void Table(TableBlock table)
         {
-            var columns = table.Rows.Max(r => r.Cells.Count); var width = settings.ColumnWidth;
-            var weights = table.ColumnWidths.Count == columns && table.ColumnWidths.All(w => double.IsFinite(w) && w > 0) ? table.ColumnWidths.ToArray() : Enumerable.Repeat(1d, columns).ToArray();
-            var total = weights.Sum(); var widths = weights.Select(w => width * w / total).ToArray();
-            for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
+            var layout = new TableLayouter(layouter, index, document.DefaultTabStop, Math.Max(12, settings.ContentHeight - 24))
+                .Measure(table, settings.ColumnWidth);
+            var repeatHeight = layout.HeaderHeight < settings.ContentHeight * 0.5 ? layout.HeaderHeight : 0;
+            void Continue(double consumed, double minimum = 0)
             {
-                var row = table.Rows[rowIndex]; var cellLines = new List<(LayoutLine line, double x, double y)>(); var rowHeight = 0d; var cellX = 0d;
-                for (var c = 0; c < row.Cells.Count; c++)
-                {
-                    var cellY = table.CellPadding;
-                    foreach (var p in DocumentModel.Walk(row.Cells[c].Blocks))
-                    {
-                        cellY += Math.Max(0, p.Format.SpaceBefore);
-                        var lines = layouter.Layout(p, Math.Max(12, widths[c] - 2 * table.CellPadding), index.StartOf(p), document.DefaultTabStop);
-                        foreach (var line in lines) { cellLines.Add((line, cellX + table.CellPadding, cellY)); cellY += line.Height; }
-                        cellY += Math.Max(0, p.Format.SpaceAfter);
-                    }
-                    rowHeight = Math.Max(rowHeight, cellY + table.CellPadding); cellX += widths[c];
-                }
-                rowHeight = Math.Max(rowHeight, 24);
-                Ensure(Math.Min(rowHeight, settings.ContentHeight)); var consumed = 0d;
-                while (consumed < rowHeight - 0.01)
+                Next();
+                if (repeatHeight > 0 && consumed >= repeatHeight - 0.0001 && repeatHeight + minimum < settings.ContentHeight)
+                    y += layout.DrawSlice(page, 0, repeatHeight, Left(), y, replica: true);
+            }
+            foreach (var group in layout.Groups)
+            {
+                var height = group.End - group.Start;
+                // Respect cantSplit for rows/merged groups that fit. Splittable rows
+                // consume remaining space; over-height groups must make progress.
+                if ((!group.AllowSplit || group.End <= layout.HeaderHeight) && height <= settings.ContentHeight && y + height > settings.Height - settings.MarginBottom && y > settings.MarginTop + 0.0001)
+                    Continue(group.Start, height);
+                var consumed = group.Start;
+                while (consumed < group.End - 0.0001)
                 {
                     var available = settings.Height - settings.MarginBottom - y;
-                    var segment = Math.Min(rowHeight - consumed, available);
-                    if (segment < 12) { Next(); continue; }
-                    var crossing = cellLines.Where(l => l.y >= consumed && l.y < consumed + segment && l.y + l.line.Height > consumed + segment).ToArray();
-                    if (crossing.Length > 0) segment = crossing.Min(l => l.y) - consumed;
-                    if (segment < 1) segment = Math.Min(rowHeight - consumed, available);
-                    cellX = Left();
-                    for (var c = 0; c < row.Cells.Count; c++)
+                    if (available < 1) { Continue(consumed); continue; }
+                    var end = Math.Min(group.End, consumed + available);
+                    var cut = layout.Cut(consumed, end);
+                    if (cut <= consumed + 0.0001)
                     {
-                        var fill = row.Cells[c].Shading ?? (table.HeaderRow && rowIndex == 0 ? "#D9E5F5" : table.BandedRows && rowIndex % 2 == 0 ? "#F3F6FA" : null);
-                        page.Cells.Add(new(table.Id, new(cellX, y, widths[c], segment), fill, table.HeaderRow && rowIndex == 0)); cellX += widths[c];
+                        if (y > settings.MarginTop + 0.0001)
+                        {
+                            // Do not repeat a header that would prevent the next item fitting.
+                            Continue(consumed, settings.ContentHeight); continue;
+                        }
+                        cut = end; // An individually oversized line must still make progress.
                     }
-                    foreach (var item in cellLines.Where(l => l.y >= consumed - 0.01 && l.y < consumed + segment - 0.01)) Place(item.line, Left() + item.x, y + item.y - consumed);
-                    y += segment; consumed += segment; if (consumed < rowHeight - 0.01) Next();
+                    var drawn = layout.DrawSlice(page, consumed, cut, Left(), y);
+                    y += drawn; consumed = cut;
+                    if (consumed < group.End - 0.0001) Continue(consumed);
                 }
             }
             y += 8;

@@ -103,29 +103,6 @@ public sealed partial class DocxWriter
         var p = E("p", E("pPr", E("jc", V(centered ? "center" : "left")))); var style = new TextStyle { FontSize = 8, Color = "#777777" };
         foreach (var part in System.Text.RegularExpressions.Regex.Split(text, @"(\{PAGE\}|\{NUMPAGES\}|\{SECTION\}|\{SECTIONPAGES\}|\{TITLE\}|\{AUTHOR\})")) p.Add(part is "{PAGE}" or "{NUMPAGES}" or "{SECTION}" or "{SECTIONPAGES}" or "{TITLE}" or "{AUTHOR}" ? E("fldSimple", new XAttribute(W + "instr", part.Trim('{', '}')), Run(part == "{TITLE}" ? _document.Title : part == "{AUTHOR}" ? _document.Author : "1", style)) : Run(part, style)); return p;
     }
-    private XElement Table(TableBlock table)
-    {
-        var count = table.Rows.Max(r => r.Cells.Count); var weights = table.ColumnWidths.Count == count && table.ColumnWidths.All(w => w > 0 && double.IsFinite(w)) ? table.ColumnWidths.ToArray() : Enumerable.Repeat(1d, count).ToArray();
-        var widths = weights.Select(w => Twips(_availableTableWidth * w / weights.Sum())).ToArray();
-        var borders = E("tblBorders", new[] { "top", "left", "bottom", "right", "insideH", "insideV" }.Select(side => E(side, V("single"), new XAttribute(W + "sz", 4), new XAttribute(W + "color", "A8B7C8"))));
-        var margins = E("tblCellMar", new[] { "top", "left", "bottom", "right" }.Select(side => E(side, new XAttribute(W + "w", Twips(table.CellPadding)), new XAttribute(W + "type", "dxa"))));
-        var result = E("tbl", E("tblPr", E("tblW", new XAttribute(W + "w", widths.Sum()), new XAttribute(W + "type", "dxa")), borders, E("tblLayout", new XAttribute(W + "type", "fixed")), margins), E("tblGrid", widths.Select(w => E("gridCol", new XAttribute(W + "w", w)))));
-        for (var r = 0; r < table.Rows.Count; r++)
-        {
-            var row = E("tr", table.HeaderRow && r == 0 ? E("trPr", E("tblHeader")) : null);
-            for (var c = 0; c < table.Rows[r].Cells.Count; c++)
-            {
-                var cell = table.Rows[r].Cells[c]; var fill = cell.Shading ?? (table.HeaderRow && r == 0 ? "#D9E5F5" : table.BandedRows && r % 2 == 0 ? "#F3F6FA" : null);
-                var parentWidth = _availableTableWidth;
-                _availableTableWidth = Math.Max(24, widths[c] / 20d - 2 * table.CellPadding);
-                var element = E("tc", E("tcPr", E("tcW", new XAttribute(W + "w", widths[c]), new XAttribute(W + "type", "dxa")), fill is null ? null : E("shd", V("clear"), new XAttribute(W + "fill", Hex(fill)))), Blocks(cell.Blocks));
-                _availableTableWidth = parentWidth;
-                if (cell.Blocks.LastOrDefault() is not Paragraph) element.Add(E("p")); row.Add(element);
-            }
-            result.Add(row);
-        }
-        return result;
-    }
     private XElement Picture(ImageBlock image)
     {
         var extension = image.ContentType == "image/jpeg" ? "jpg" : image.ContentType == "image/gif" ? "gif" : "png";

@@ -118,6 +118,9 @@ public sealed partial class WordWorkbench
                 case "merge-recipients": await SelectRecipientsAsync(); return;
                 case "merge-preview": await PreviewMergeAsync(); return;
                 case "merge-finish": await FinishMergeAsync(); break;
+                case "merge-cells": await MergeCellsAsync(); break;
+                case "split-cell": Session.SplitTableCell(); break;
+                case "row-options": await TableRowOptionsAsync(); break;
                 case "table-row": Session.AddTableRow(); break;
                 case "table-column": Session.AddTableColumn(); break;
                 case "table-properties": await TablePropertiesAsync(); break;
