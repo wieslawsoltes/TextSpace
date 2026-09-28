@@ -11,24 +11,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/download-artifact@v4
         with:
           name: TextSpace-browser-validation
           run-id: 36449604005
           github-token: ${{ github.token }}
           path: evidence
-      - name: Compare original and downloaded bytes without normalization
-        shell: python
+      - name: Verify raw bytes and decoding independently of the live UI
+        shell: bash
         run: |
-          import pathlib,hashlib,json
-          root=pathlib.Path('evidence')
-          for p in root.rglob('*.textspace'):
-              if 'recovery' not in p.parts: continue
-              b=p.read_bytes()
-              print('FILE',p,'BYTES',len(b),'SHA256',hashlib.sha256(b).hexdigest(),'PREFIX',b[:24].hex())
-          for p in root.rglob('report.json'):
-              if 'recovery' not in p.parts: continue
-              r=json.loads(p.read_text())
-              print('FAILURE',r.get('failure'))
-              print('STATE',json.dumps({k:r.get('state',{}).get(k) for k in ['title','status','dialog','selectedTab']},ensure_ascii=False))
-              print('CONTROLS',json.dumps([c for c in r.get('state',{}).get('controls',[]) if 'Download original' in c.get('name','')],ensure_ascii=False))
+          node --input-type=module <<'JS'
+          import fs from 'node:fs/promises';
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          console.log('NODE',process.version);
+          const root='evidence/test-results/recovery/';
+          const source=await fs.readFile(root+'bom-source.textspace');
+          const retained=await fs.readFile(root+'bom-retained.textspace');
+          console.log('RAW',JSON.stringify({sourceLength:source.length,retainedLength:retained.length,sourceHash:createHash('sha256').update(source).digest('hex'),retainedHash:createHash('sha256').update(retained).digest('hex'),prefix:[...retained.subarray(0,6)]}));
+          assert.deepEqual(retained,source);
+          const direct=await fs.readFile(root+'bom-retained.textspace','utf8');
+          console.log('DECODERS',JSON.stringify({readFileFirst:direct.charCodeAt(0),bufferFirst:retained.toString('utf8').charCodeAt(0),textDecoderFirst:new TextDecoder('utf-8',{ignoreBOM:true,fatal:true}).decode(retained).charCodeAt(0)}));
+          console.log('REPORT',await fs.readFile(root+'report.json','utf8'));
+          JS
