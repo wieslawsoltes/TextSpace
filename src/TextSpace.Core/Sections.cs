@@ -3,7 +3,7 @@ using System.Text;
 
 namespace TextSpace.Core;
 
-public enum SectionBreakKind { NextPage, OddPage, EvenPage }
+public enum SectionBreakKind { NextPage, OddPage, EvenPage, Continuous, NextColumn }
 public enum PageNumberStyle { Decimal, UpperRoman, LowerRoman, UpperLetter, LowerLetter }
 
 /// <summary>Null story variants inherit from the previous section; an empty string is explicitly blank.</summary>

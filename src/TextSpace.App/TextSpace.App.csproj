@@ -7,7 +7,7 @@
     <UnoFeatures>SkiaRenderer;</UnoFeatures>
     <ApplicationTitle>TextSpace</ApplicationTitle>
     <ApplicationId>io.github.wieslawsoltes.textspace</ApplicationId>
-    <ApplicationDisplayVersion>0.4.0</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>0.5.0</ApplicationDisplayVersion>
     <ApplicationVersion>4</ApplicationVersion>
     <ApplicationPublisher>TextSpace contributors</ApplicationPublisher>
     <Description>Local-first word processing with Uno Platform and SkiaSharp.</Description>

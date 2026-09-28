@@ -120,14 +120,18 @@ public static class HtmlExporter
             }
         }
         var styles = new StringBuilder();
-        var sections = DocumentSections.Definitions(document); var number = 0; var blocks = new List<Block>();
+        var sections = DocumentSections.Definitions(document); var number = 0; var pageName = 0; var blocks = new List<Block>();
         void Section(SectionBreakKind? kind)
         {
             var page = sections[number].Page;
+            var samePaper = number > 0 && Math.Abs(page.Width - sections[number - 1].Page.Width) < 0.0001
+                && Math.Abs(page.Height - sections[number - 1].Page.Height) < 0.0001;
+            if (kind is not (SectionBreakKind.Continuous or SectionBreakKind.NextColumn) || !samePaper) pageName = number;
             styles.Append("@page section").Append(number).Append("{size:").Append(N(page.Width)).Append("pt ").Append(N(page.Height)).Append("pt;margin:")
                 .Append(N(page.MarginTop)).Append("pt ").Append(N(page.MarginRight)).Append("pt ").Append(N(page.MarginBottom)).Append("pt ").Append(N(page.MarginLeft)).Append("pt}");
-            body.Append("<section style=\"page:section").Append(number).Append(";max-width:").Append(N(page.ContentWidth)).Append("pt;margin:0 auto;column-count:").Append(page.Columns).Append(";column-gap:").Append(N(page.ColumnGap)).Append("pt;");
-            if (kind is not null) body.Append("break-before:").Append(kind == SectionBreakKind.OddPage ? "right" : kind == SectionBreakKind.EvenPage ? "left" : "page").Append(';');
+            body.Append("<section data-section-start=\"").Append(kind?.ToString() ?? "First").Append("\" style=\"page:section").Append(pageName).Append(";max-width:").Append(N(page.ContentWidth)).Append("pt;margin:0 auto;column-count:").Append(page.Columns).Append(";column-gap:").Append(N(page.ColumnGap)).Append("pt;");
+            if (kind is not null) body.Append("break-before:").Append(kind == SectionBreakKind.OddPage ? "right" : kind == SectionBreakKind.EvenPage ? "left"
+                : samePaper && kind == SectionBreakKind.Continuous ? "auto" : samePaper && kind == SectionBreakKind.NextColumn ? "column" : "page").Append(';');
             body.Append("\">"); Blocks(blocks); body.Append("</section>"); blocks.Clear(); number++;
         }
         SectionBreakKind? preceding = null;

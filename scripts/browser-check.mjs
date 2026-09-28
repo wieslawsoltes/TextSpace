@@ -58,7 +58,14 @@ try {
         return !process.env.TEXTSPACE_EXPECTED_COMMIT || info.commit === process.env.TEXTSPACE_EXPECTED_COMMIT;
       } catch { return false; }
     }, 'Build metadata unavailable or outdated', 90000);
-    assert.equal(info.host, 'Uno WebAssembly'); report.build = info;
+    report.build = info;
+    const properties = await fs.readFile(new URL('../Directory.Build.props', import.meta.url), 'utf8');
+    const versions = [...properties.matchAll(/<Version>([^<]+)<\/Version>/g)];
+    assert.equal(versions.length, 1, 'Package version must have one authoritative declaration');
+    const expectedVersion = (process.env.VERSION || versions[0][1]).trim();
+    assert.equal(info.application, 'TextSpace');
+    assert.equal(info.host, 'Uno WebAssembly');
+    assert.equal(info.version, expectedVersion, 'Publication metadata does not match the checked-out package version');
   });
   await check('runtime module is statically served', async () => {
     for (const name of ['_framework/dotnet.js', '_framework/dotnet.js?version=static-preflight']) {

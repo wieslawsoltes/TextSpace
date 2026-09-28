@@ -20,7 +20,7 @@ Structural edits remap comments, revisions and selection through surviving parag
 
 ParagraphLayouter emits line/chunk geometry and caret positions through ITextMetrics. PageLayoutEngine flows paragraphs, breaks, tables and pictures into pages/columns. DocumentRenderer uses the same geometry for on-screen pages and PDF/PNG. The editor culls offscreen pages and uses an Uno text-input bridge for typing.
 
-This is not yet Word's layout engine: continuous sections, mixed-direction text, hyphenation, floating-object wrapping and independent document stories remain incomplete. Matching layout requires matching font files, not merely matching family names.
+This is not yet Word's layout engine: complete mixed-object column balancing, mixed-direction text, automatic dictionary hyphenation, floating-object wrapping and independent document stories remain incomplete. Matching layout requires matching font files, not merely matching family names.
 
 ## Hosting and verification
 
@@ -35,3 +35,9 @@ The browser is tested with real mouse/keyboard input. Opt-in diagnostics expose 
 `DocumentField` references a non-overlapping, grapheme-aligned cached-text range in one paragraph. Instructions are data, not executable code. `FieldEngine` evaluates an explicit allowlist with bounded dependency recursion. `EditorSession.UpdateFields` computes and replaces results from right to left while remapping anchors, preserving selection and typing attributes, and suppressing tracked-text noise. It repeats with fresh layout until results stabilize; eight unsuccessful passes roll the entire update back. Unknown instructions retain cached text; DOCX export locks them. Native files remain the preservation format.
 
 A live contents block is a transaction combining generated bookmark targets, styled paragraphs, and REF/PAGEREF fields. It is exported as standard linked fields, not as a claim to implement the entire Word TOC field grammar.
+
+## Physical pages and section regions
+
+`SectionFlow` separates physical-page creation from same-page section transitions. `LayoutRegion` carries immutable section settings plus finalized column/vertical extents and logical numbering. `ColumnBalancer` groups lines at permitted break boundaries and runs bounded packing search for eligible paragraph-only bands. Canonical lines receive their region and column at placement; table-header replicas remain excluded from text lookup. `DocumentLayout` resolves field context and active-column rulers through its existing interval index.
+
+`VisiblePageRange` is a nonallocating, half-open page interval. `DocumentTextSnapshot` captures text/statistics explicitly; the workbench replaces its presentation snapshot on document notifications/revisions/model replacement, not on scrolling. These optimizations do not remove transaction snapshots, full index construction on edits or whole-document pagination.

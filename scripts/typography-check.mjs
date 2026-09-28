@@ -5,10 +5,15 @@ import { chromium } from '@playwright/test';
 const base = (process.env.TEXTSPACE_BASE_URL || 'http://127.0.0.1:4173/TextSpace/').replace(/\/?$/, '/');
 const output = 'test-results/typography';
 await fs.mkdir(output, { recursive: true });
-const report = { base, checks: [], errors: [] };
+const report = { base, checks: [], errors: [], fileChooserEvents: 0 };
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
 const page = await context.newPage();
+// Keep interception armed before navigation. Playwright updates protocol event
+// subscriptions asynchronously; an immediate raw keyboard command can open the
+// picker before a newly installed one-shot wait has enabled interception.
+// This observer neither opens a picker nor supplies files or edits the document.
+page.on('filechooser', () => report.fileChooserEvents++);
 page.on('pageerror', error => report.errors.push(error.message));
 const state = () => page.evaluate(() => globalThis.__textSpaceState);
 async function until(condition, message, timeout = 30000) {
@@ -77,8 +82,18 @@ try {
   await check('DOCX export and reimport preserves typography semantics', async () => {
     await click('File tab'); await click('File Export'); const pending = page.waitForEvent('download'); await click('Word document'); const download = await pending;
     await download.saveAs(output + '/typography.docx'); assert.equal((await fs.readFile(output + '/typography.docx')).subarray(0, 2).toString(), 'PK');
-    await click('Back to document'); await readyInput((await state()).text);
+    await click('Back to document');
+    // Establish the real focus precondition after downloading, independently of
+    // the interception subscription above. No test-only focus or editing API.
+    await page.bringToFront();
+    const { canvas } = await state();
+    await page.mouse.click(canvas.x + canvas.paperLeft + 75 * canvas.scale,
+      canvas.y + 18 + 75 * canvas.scale - canvas.scrollY);
+    await until(() => page.evaluate(() => document.hasFocus()), 'Browser page did not regain focus');
+    await readyInput((await state()).text);
+    const previousChoosers = report.fileChooserEvents;
     const chooser = page.waitForEvent('filechooser'); await page.keyboard.press('Control+o'); await (await chooser).setFiles(output + '/typography.docx'); await page.waitForTimeout(500);
+    assert.equal(report.fileChooserEvents, previousChoosers + 1, 'Ctrl+O must open exactly one real file chooser');
     if ((await state()).dialog) await click('Continue without a copy');
     await until(async () => !(await state()).dialog && (await state()).typography.tabStops[0]?.relative === false, 'DOCX tab normalization not imported');
     const t = (await state()).typography; assert.equal(t.tabStops[0].alignment, 'Right'); assert.equal(t.tabStops[0].leader, 'Dot'); assert.equal(t.defaultTabStop, 48); assert.equal(t.keepLinesTogether, true); assert.equal(t.widowControl, false);
@@ -121,9 +136,9 @@ try {
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;
-  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
+  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ focused: document.hasFocus(), visibility: document.visibilityState, active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
   await page.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));
-  console.log('TYPOGRAPHY ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, failure: report.failure })); await browser.close();
+  console.log('TYPOGRAPHY ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, fileChooserEvents: report.fileChooserEvents, failure: report.failure })); await browser.close();
 }

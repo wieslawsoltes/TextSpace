@@ -1,0 +1,124 @@
+{
+  "framework": ".NET 10.0.12",
+  "os": "Debian GNU/Linux 13 (trixie)",
+  "architecture": "X64",
+  "warmups": 3,
+  "measurements": 7,
+  "paragraphs": 500,
+  "characters": 62889,
+  "pages": 10000,
+  "viewportQueries": 2000,
+  "wordCountQueries": 25,
+  "beforeViewport": {
+    "medianMs": 167.2304,
+    "medianAllocatedBytes": 0,
+    "rawMs": [
+      187.1952,
+      159.5262,
+      171.8051,
+      155.8932,
+      155.3813,
+      167.2304,
+      228.4121
+    ],
+    "rawAllocatedBytes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "indexedViewport": {
+    "medianMs": 0.551,
+    "medianAllocatedBytes": 0,
+    "rawMs": [
+      0.5263,
+      0.9766,
+      0.6182,
+      0.5761,
+      0.551,
+      0.5303,
+      0.5477
+    ],
+    "rawAllocatedBytes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "beforeWords": {
+    "medianMs": 152.537,
+    "medianAllocatedBytes": 62496472,
+    "rawMs": [
+      239.7951,
+      150.5111,
+      146.2337,
+      152.537,
+      171.9805,
+      213.493,
+      119.6141
+    ],
+    "rawAllocatedBytes": [
+      62216744,
+      62496472,
+      62496512,
+      62496400,
+      62496424,
+      62503216,
+      62496504
+    ]
+  },
+  "capturedWords": {
+    "medianMs": 0.0003,
+    "medianAllocatedBytes": 0,
+    "rawMs": [
+      0.0005,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003
+    ],
+    "rawAllocatedBytes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "captureCost": {
+    "medianMs": 5.1327,
+    "medianAllocatedBytes": 365376,
+    "rawMs": [
+      3.7083,
+      3.5171,
+      3.6162,
+      5.1327,
+      5.4747,
+      5.4387,
+      6.24
+    ],
+    "rawAllocatedBytes": [
+      365376,
+      365376,
+      365376,
+      365376,
+      365376,
+      365376,
+      365376
+    ]
+  },
+  "sink": 4678440,
+  "scope": "CPU query microbenchmarks; excludes rendering, browser input, full edit/repagination and startup. Cached statistics are reused only until the next document change."
+}

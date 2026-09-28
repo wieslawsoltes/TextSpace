@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - name: Test publication metadata
+        run: python3 -m unittest discover -s tests/build
       - name: Test engine and interchange
         run: dotnet test tests/TextSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
       - uses: actions/upload-artifact@v4

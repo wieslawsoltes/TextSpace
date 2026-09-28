@@ -23,7 +23,7 @@ public sealed class DocumentModel
     public List<DocumentField> Fields { get; set; } = [];
     public List<Bookmark> Bookmarks { get; set; } = [];
     [JsonIgnore] public string PlainText => new TextIndex(this).Text;
-    [JsonIgnore] public int WordCount => Regex.Matches(PlainText, @"[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*").Count;
+    [JsonIgnore] public int WordCount => DocumentTextSnapshot.CountWords(PlainText);
     public IEnumerable<Paragraph> Paragraphs() => Walk(Blocks);
     public static IEnumerable<Paragraph> Walk(IEnumerable<Block> blocks)
     {

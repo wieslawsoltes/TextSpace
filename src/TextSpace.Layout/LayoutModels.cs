@@ -41,6 +41,8 @@ public sealed class LayoutLine
     public int Start { get; init; }
     public int End { get; init; }
     public int PageIndex { get; set; }
+    public LayoutRegion? Region { get; internal set; }
+    public int ColumnIndex { get; internal set; }
     public bool IsReplica { get; init; }
     public double X { get; set; }
     public double Y { get; set; }
@@ -105,6 +107,7 @@ public sealed class LayoutPage(int index, PageSettings settings)
         : Section.Options.DifferentOddAndEven && PageNumber % 2 == 0 ? Section.Options.EvenHeader ?? "" : Section.Header ?? "";
     public string Footer => IsParityBlank ? "" : Section.Options.DifferentFirstPage && SectionPageIndex == 0 ? Section.Options.FirstFooter ?? ""
         : Section.Options.DifferentOddAndEven && PageNumber % 2 == 0 ? Section.Options.EvenFooter ?? "" : Section.Footer ?? "";
+    public List<LayoutRegion> Regions { get; } = [];
     public List<LayoutLine> Lines { get; } = [];
     public List<LayoutCell> Cells { get; } = [];
     public List<LayoutImage> Images { get; } = [];
@@ -123,6 +126,7 @@ public sealed partial class DocumentLayout
     public IReadOnlyList<LayoutPage> Pages { get; }
     public double Width { get; }
     public double Height { get; }
+    public IReadOnlyList<LayoutNotice> Notices { get; init; } = [];
     public IEnumerable<LayoutLine> Lines => _lines;
 
     public DocumentLayout(PageSettings settings, IReadOnlyList<LayoutPage> pages)
@@ -149,8 +153,11 @@ public sealed partial class DocumentLayout
     }
     public FieldPageInfo FieldPageAt(int position)
     {
-        var page = Pages[Caret(position).PageIndex];
-        return new(page.PageNumber, Pages.Count, page.SectionIndex + 1, page.SectionPageCount, page.Section.Options.NumberStyle);
+        var line = FindCaretLine(position);
+        var page = Pages[line?.PageIndex ?? 0]; var region = line?.Region;
+        return region is null
+            ? new(page.PageNumber, Pages.Count, page.SectionIndex + 1, page.SectionPageCount, page.Section.Options.NumberStyle)
+            : new(region.PageNumber, Pages.Count, region.SectionIndex + 1, region.SectionPageCount, region.Section.Options.NumberStyle);
     }
     public int HitTest(double x, double documentY)
     {
