@@ -38,7 +38,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Pin the supported Apple Silicon image; do not skip native validation
+        # or treat an unassigned floating-label runner as a successful build.
+        os: [ubuntu-latest, windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -49,6 +51,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify native Apple Silicon runner
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+          dotnet --info
       - run: python scripts/fetch-assets.py
       - run: dotnet build src/TextSpace.App -c Release -p:TextSpaceDesktopOnly=true
   browser:
