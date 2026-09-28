@@ -5,7 +5,23 @@ import json
 import os
 import re
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+
+def resolve_version(root=None, override=None):
+    """Read the package version instead of leaving stale release literals."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parents[1]
+    if override is None:
+        override = os.environ.get('VERSION')
+    version = override
+    if not version:
+        properties = ET.parse(root / 'Directory.Build.props').getroot()
+        version = properties.findtext('./PropertyGroup/Version')
+    version = (version or '').strip()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?', version):
+        raise ValueError('A valid package version is required for publication provenance')
+    return version
 
 
 def main():
@@ -13,6 +29,7 @@ def main():
     parser.add_argument('publish', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args()
+    version = resolve_version()
     roots = sorted(args.publish.rglob('index.html'), key=lambda p: len(p.parts))
     if not roots:
         raise SystemExit('Uno publication contains no index.html')
@@ -36,7 +53,7 @@ def main():
     (args.output / 'build-info.json').write_text(json.dumps({
         'application': 'TextSpace', 'host': 'Uno WebAssembly',
         'commit': os.environ.get('GITHUB_SHA', 'local'),
-        'version': os.environ.get('VERSION', '0.4.0-alpha.1')
+        'version': version
     }, indent=2) + '\n')
     print('Collected', source, 'to', args.output, flush=True)
 
