@@ -109,6 +109,13 @@ try {
     const before = (await state()).text; await page.waitForTimeout(2200); await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => globalThis.__textSpaceState?.typography, null, { timeout: 150000 });
     await until(async () => (await state()).text === before, 'Recovery text mismatch'); assert.equal((await state()).fields.length, 4);
+    // Reload restores data, not browser focus. A real pointer action must acquire
+    // native input before issuing Ctrl+S; diagnostics remain read-only.
+    await until(async () => (await state()).canvas.width > 200, 'Recovered editor is not laid out');
+    const { canvas } = await state();
+    await page.mouse.click(canvas.x + canvas.paperLeft + 75 * canvas.scale,
+      canvas.y + 18 + 75 * canvas.scale - canvas.scrollY);
+    await readyInput(before);
     const saved = await native('recovered-contents'); assert.equal(saved.blocks.filter(b => b.format?.tabStops?.some(t => t.leader === 'Dot')).length, 2);
   });
   assert.deepEqual(report.errors, []); report.success = true;
