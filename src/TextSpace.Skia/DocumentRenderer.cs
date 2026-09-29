@@ -13,6 +13,7 @@ public sealed record RenderOptions
     public bool ShowChanges { get; init; } = true;
     public bool ShowBoundaries { get; init; }
     public string? SelectedImageId { get; init; }
+    public string? HiddenObjectId { get; init; }
 }
 
 public sealed partial class DocumentRenderer : IDisposable
@@ -20,7 +21,11 @@ public sealed partial class DocumentRenderer : IDisposable
     private readonly Dictionary<string, SKBitmap> _images = [];
     public SkiaTextMetrics Metrics { get; } = new();
     private PageLayoutEngine? _layoutEngine;
-    public DocumentLayout Layout(DocumentModel document) => (_layoutEngine ??= new PageLayoutEngine(Metrics)).Layout(document);
+    public DocumentLayout Layout(DocumentModel document)
+    {
+        ClearVisualLayouts();
+        return (_layoutEngine ??= new PageLayoutEngine(Metrics)).Layout(document);
+    }
     public static SKColor Color(string? text, string fallback = "#202020") => SKColor.TryParse(text ?? fallback, out var color) ? color : SKColor.Parse(fallback);
     private static SKRect Rect(RectD r) => SKRect.Create((float)r.X, (float)r.Y, (float)r.Width, (float)r.Height);
     public void ClearImages() { foreach (var bitmap in _images.Values) bitmap.Dispose(); _images.Clear(); }
@@ -56,20 +61,7 @@ public sealed partial class DocumentRenderer : IDisposable
             if (cell.DrawBottom) canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, paint);
             paint.Style = SKPaintStyle.Fill;
         }
-        foreach (var image in page.Images)
-        {
-            if (!_images.TryGetValue(image.Image.Id, out var bitmap))
-            {
-                bitmap = SKBitmap.Decode(image.Image.Data); if (bitmap is not null) _images[image.Image.Id] = bitmap;
-            }
-            if (bitmap is not null) { paint.Color = SKColors.White; canvas.DrawBitmap(bitmap, Rect(image.Bounds), paint); }
-            else { paint.Color = Color("#EEEEEE"); canvas.DrawRect(Rect(image.Bounds), paint); paint.Color = Color("#666666"); Metrics.Draw(canvas, image.Image.AltText, image.Bounds.X + 8, image.Bounds.Y + 18, new(), paint); }
-            if (options.SelectedImageId == image.Image.Id)
-            {
-                paint.Color = Color("#185ABD"); paint.Style = SKPaintStyle.Stroke; paint.StrokeWidth = 1; canvas.DrawRect(Rect(image.Bounds), paint); paint.Style = SKPaintStyle.Fill;
-                foreach (var point in new[] { new SKPoint((float)image.Bounds.X, (float)image.Bounds.Y), new SKPoint((float)image.Bounds.Right, (float)image.Bounds.Y), new SKPoint((float)image.Bounds.X, (float)image.Bounds.Bottom), new SKPoint((float)image.Bounds.Right, (float)image.Bounds.Bottom) }) canvas.DrawRect(point.X - 3, point.Y - 3, 6, 6, paint);
-            }
-        }
+        DrawVisualObjects(canvas, page, options, floating: false);
         foreach (var line in page.Lines)
         {
             var lineSettings = line.Region?.Section.Page ?? settings;
@@ -107,6 +99,7 @@ public sealed partial class DocumentRenderer : IDisposable
                 paint.Color = Color("#C43E1C"); paint.StrokeWidth = 1.5f; canvas.DrawLine((float)(columnLeft - 14), (float)line.Y, (float)(columnLeft - 14), (float)(line.Y + line.Height), paint);
             }
         }
+        DrawVisualObjects(canvas, page, options, floating: true);
         if (options.ShowFormatting)
         {
             var markerStyle = new TextStyle { FontSize = 7, Color = "#8F9BAB" };

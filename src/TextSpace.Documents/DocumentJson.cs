@@ -71,9 +71,13 @@ public static partial class DocumentJson
                     case ColumnBreakBlock:
                         if (depth != 0) throw new InvalidDataException("Column breaks cannot occur inside a table.");
                         break;
-                    case ImageBlock image:
-                        images += image.Data?.Length ?? 0;
-                        if (images > MaxFileBytes || !double.IsFinite(image.Width + image.Height) || image.Width is <= 0 or > 4000 || image.Height is <= 0 or > 4000) throw new InvalidDataException("Invalid picture.");
+                    case VisualBlock visual:
+                        VisualBlockRules.Validate(visual);
+                        if (depth > 0 && visual.Placement.Floating) throw new InvalidDataException("Floating placement is supported in the main story; objects inside table cells remain in flow.");
+                        if (visual is ImageBlock image) images += image.Data.Length;
+                        if (visual is ShapeBlock shape) chars += shape.Text.Length;
+                        if (visual is EquationBlock equation) chars += equation.Root.DescendantsAndSelf().Sum(n => n.Text.Length);
+                        if (images > MaxFileBytes || chars > MaxCharacters) throw new InvalidDataException("Visual content exceeds the document limits.");
                         break;
                 }
             }
@@ -107,4 +111,6 @@ public static partial class DocumentJson
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(DocumentModel))]
 [JsonSerializable(typeof(TabStop))]
+[JsonSerializable(typeof(Block))]
+[JsonSerializable(typeof(EquationNode))]
 internal partial class DocumentJsonContext : JsonSerializerContext;

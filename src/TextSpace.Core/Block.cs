@@ -6,6 +6,8 @@ namespace TextSpace.Core;
 [JsonDerivedType(typeof(Paragraph), "paragraph")]
 [JsonDerivedType(typeof(TableBlock), "table")]
 [JsonDerivedType(typeof(ImageBlock), "image")]
+[JsonDerivedType(typeof(ShapeBlock), "shape")]
+[JsonDerivedType(typeof(EquationBlock), "equation")]
 [JsonDerivedType(typeof(PageBreakBlock), "pageBreak")]
 [JsonDerivedType(typeof(SectionBreakBlock), "sectionBreak")]
 [JsonDerivedType(typeof(ColumnBreakBlock), "columnBreak")]

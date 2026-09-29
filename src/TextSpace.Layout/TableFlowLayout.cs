@@ -34,6 +34,8 @@ internal sealed class TableFlowLayout
     public List<LayoutLine> Lines { get; } = [];
     public List<LayoutCell> Cells { get; } = [];
     public List<LayoutImage> Images { get; } = [];
+    public List<LayoutObject> Objects { get; } = [];
+    public VerticalIntervalIndex<LayoutObject> ObjectIndex { get; private set; } = null!;
     public VerticalIntervalIndex<LayoutLine> LineIndex { get; private set; } = null!;
     public VerticalIntervalIndex<LayoutCell> CellIndex { get; private set; } = null!;
     public VerticalIntervalIndex<LayoutImage> ImageIndex { get; private set; } = null!;
@@ -42,6 +44,7 @@ internal sealed class TableFlowLayout
         LineIndex = new(Lines, l => l.Y, l => l.Y + l.Height);
         CellIndex = new(Cells, c => c.Bounds.Y, c => c.Bounds.Bottom);
         ImageIndex = new(Images, i => i.Bounds.Y, i => i.Bounds.Bottom);
+        ObjectIndex = new(Objects, o => o.Bounds.Y, o => o.Bounds.Bottom);
     }
     public double Cut(double start, double end)
     {
@@ -50,24 +53,29 @@ internal sealed class TableFlowLayout
             if (line.Y >= start && line.Y + line.Height > end + 0.0001) cut = Math.Min(cut, line.Y);
         foreach (var image in ImageIndex.Intersect(end - 0.000001, end))
             if (image.Bounds.Y >= start && image.Bounds.Bottom > end + 0.0001) cut = Math.Min(cut, image.Bounds.Y);
+        foreach (var item in ObjectIndex.Intersect(end - 0.000001, end))
+            if (item.Bounds.Y >= start && item.Bounds.Bottom > end + 0.0001) cut = Math.Min(cut, item.Bounds.Y);
         return cut;
     }
     public double DrawSlice(LayoutPage page, double start, double end, double x, double y, bool replica = false)
     {
         var lines = LineIndex.Intersect(start, end).Where(l => l.Y >= start - 0.0001 && l.Y < end - 0.0001).ToArray();
         var images = ImageIndex.Intersect(start, end).Where(i => i.Bounds.Y >= start - 0.0001 && i.Bounds.Y < end - 0.0001).ToArray();
+        var objects = ObjectIndex.Intersect(start, end).Where(i => i.Bounds.Y >= start - 0.0001 && i.Bounds.Y < end - 0.0001).ToArray();
         // Lines in different columns need not have identical baselines. Finish every
         // assigned line within the available area; carry the next line only once.
         var drawEnd = Math.Max(end, Math.Max(lines.Length == 0 ? end : lines.Max(l => l.Y + l.Height), images.Length == 0 ? end : images.Max(i => i.Bounds.Bottom)));
+        if (objects.Length > 0) drawEnd = Math.Max(drawEnd, objects.Max(o => o.Bounds.Bottom));
         foreach (var cell in CellIndex.Intersect(start, drawEnd))
         {
             var top = Math.Max(start, cell.Bounds.Y); var bottom = Math.Min(drawEnd, cell.Bounds.Bottom);
-            page.Cells.Add(cell with { Bounds = new(x + cell.Bounds.X, y + top - start, cell.Bounds.Width, bottom - top),
+            page.Cells.Add(cell with { TableLeft = cell.TableLeft + x, Bounds = new(x + cell.Bounds.X, y + top - start, cell.Bounds.Width, bottom - top),
                 DrawTop = cell.DrawTop && cell.Bounds.Y >= start - 0.0001,
                 DrawBottom = cell.DrawBottom && cell.Bounds.Bottom <= end + 0.0001, IsReplica = replica });
         }
         foreach (var line in lines) page.Lines.Add(LayoutGeometry.Copy(line, x, y - start, page.Index, replica));
-        foreach (var image in images) page.Images.Add(image with { Bounds = new(x + image.Bounds.X, y + image.Bounds.Y - start, image.Bounds.Width, image.Bounds.Height) });
+        foreach (var image in images) page.Images.Add(image with { IsReplica = replica, Bounds = new(x + image.Bounds.X, y + image.Bounds.Y - start, image.Bounds.Width, image.Bounds.Height) });
+        foreach (var item in objects) page.Objects.Add(item with { IsReplica = replica, Bounds = new(x + item.Bounds.X, y + item.Bounds.Y - start, item.Bounds.Width, item.Bounds.Height) });
         return drawEnd - start;
     }
 }
