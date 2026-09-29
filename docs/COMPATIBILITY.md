@@ -21,7 +21,7 @@ TextSpace is an independent development preview, not Microsoft Word. Implemented
 | Contents | Hidden bookmarks, live linked REF/PAGEREF entries and right-aligned dot leaders; rebuild via Update Table | Not an enclosing native Word TOC field; native edge-relative stops export as absolute positions |
 | Drawing | In-flow raster pictures, sizing and alternative text | Floating text boxes/shapes, embedded objects and advanced drawing layout unsupported |
 | Recovery | Rolling IndexedDB/native history, actionable startup Recovery Center, previewed tab repair, protected originals/downloads and earlier-snapshot restoration | Narrow repair may change layout; failed/full protection blocks replacement; bounded local archives are not independent backups; abrupt termination can lose debounced edits |
-| Delivery | Exact-commit CI, real-input browser checks, ten packable libraries, Pages validation and tagged release workflow | Package creation is not NuGet publication; NuGet upload is explicitly opt-in |
+| Delivery | Exact-commit CI, real-input browser checks, ten NuGet libraries published with Trusted Publishing on version tags, single-file desktop executables, Pages validation and tagged release workflow | Desktop executables are not code-signed yet |
 
 ## Validation scope
 

@@ -1,15 +1,20 @@
 <Project>
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><LangVersion>14</LangVersion>
-    <Version>0.5.1-alpha.1</Version><Authors>Wiesław Šoltés; TextSpace contributors</Authors>
-    <Company>TextSpace</Company><Copyright>Copyright © 2026 TextSpace contributors</Copyright>
+    <Version>0.5.1-alpha.1</Version><Authors>Wiesław Šoltés</Authors>
+    <Company>Wiesław Šoltés</Company><Copyright>Copyright © 2026 Wiesław Šoltés</Copyright>
     <RepositoryUrl>https://github.com/wieslawsoltes/TextSpace</RepositoryUrl><RepositoryType>git</RepositoryType>
-    <PackageProjectUrl>https://github.com/wieslawsoltes/TextSpace</PackageProjectUrl>
+    <PackageProjectUrl>https://wieslawsoltes.github.io/UnoSpace/projects/textspace/</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression><PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageTags>textspace;word-processor;rich-text;document-editor;docx;pagination;harfbuzz;uno-platform;skiasharp</PackageTags>
     <IncludeSymbols>true</IncludeSymbols><SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PublishRepositoryUrl>true</PublishRepositoryUrl><EmbedUntrackedSources>true</EmbedUntrackedSources>
     <Deterministic>true</Deterministic><ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
-  <ItemGroup><None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" /></ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)build/icon.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 </Project>

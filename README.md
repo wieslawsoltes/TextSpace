@@ -61,6 +61,20 @@ Protected archives are bounded and never automatically evicted. Failed/full prot
 
 Create, rename, move, delete and navigate bookmarks through Insert. Renaming updates matching internal hyperlinks atomically. DOCX contains real bookmark markers; HTML contains safe named targets and escaped CSS under a restrictive content-security policy. [Bookmarks](docs/BOOKMARKS.md).
 
+## Download
+
+Every [release](https://github.com/wieslawsoltes/TextSpace/releases/latest) ships a self-contained, single-file desktop app — no .NET install needed:
+
+| OS | x64 | Arm64 |
+| --- | --- | --- |
+| Windows | `TextSpace-<version>-win-x64.zip` | `TextSpace-<version>-win-arm64.zip` |
+| macOS | `TextSpace-<version>-osx-x64.tar.gz` | `TextSpace-<version>-osx-arm64.tar.gz` |
+| Linux | `TextSpace-<version>-linux-x64.tar.gz` | `TextSpace-<version>-linux-arm64.tar.gz` |
+
+Extract and run `TextSpace` (`TextSpace.exe` on Windows). Builds are not code-signed yet: on macOS clear the quarantine flag with `xattr -d com.apple.quarantine TextSpace`; on Windows choose **More info → Run anyway** in SmartScreen. Verify downloads against `SHA256SUMS.txt`.
+
+The libraries below are published to [NuGet.org](https://www.nuget.org/packages?q=TextSpace), e.g. `dotnet add package TextSpace.Core --prerelease`.
+
 ## Ten reusable libraries
 
 | Library | Responsibility |
@@ -126,7 +140,7 @@ Open `http://127.0.0.1:4173/TextSpace/`. Browser builds require HTTP/HTTPS; `fil
 
 Browser diagnostics expose read-only state/geometry. Tests use actual mouse/keyboard/filechooser input; storage mutation is limited to deliberate persisted-input/failure fixtures. Native compilation does not establish exhaustive native interaction, and Chromium results do not establish Safari/Firefox/mobile/IME/accessibility parity.
 
-**Release** consumes a successful main browser build for the exact commit, packages libraries and produces versioned archives/checksums. NuGet upload is an explicit opt-in requiring the configured secret. Package creation is not publication. [Publishing](docs/PUBLISHING.md).
+**Release** runs for `v*` tags or a supplied manual version. It consumes a successful main browser build for the exact commit, reruns engine tests, publishes self-contained single-file desktop executables for Windows, macOS and Linux (x64 and arm64), packs the ten libraries with symbols and produces versioned source/browser archives and checksums. Tags attach all assets to a GitHub Release and publish the packages to NuGet.org with [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) (OIDC, no stored API key) from the protected `nuget` environment. Manual runs are dry runs: they build and upload every asset as workflow artifacts but publish nothing. [Publishing](docs/PUBLISHING.md).
 
 ## Performance and compatibility
 

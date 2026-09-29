@@ -5,22 +5,98 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Semantic package version
+        description: Version for a dry run (tags publish; manual runs only build and upload artifacts)
         type: string
         required: true
         default: 0.5.1-alpha.1
-      publish_nuget:
-        description: Publish validated packages with the nuget environment's NUGET_API_KEY
-        type: boolean
-        default: false
 permissions:
   contents: read
   actions: read
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+env:
+  APP_NAME: TextSpace
+  APP_PROJECT: src/TextSpace.App
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        name: Resolve release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        shell: bash
+        run: |
+          VERSION="$INPUT_VERSION"
+          if [ "$REF_TYPE" = tag ]; then VERSION="${REF_NAME#v}"; fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version '$VERSION'" >&2; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop (${{ matrix.rid }})
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Fetch pinned font assets
+        run: python3 scripts/fetch-assets.py
+      - name: Publish self-contained single-file executable
+        shell: bash
+        run: |
+          dotnet publish "$APP_PROJECT" -c Release -f net10.0-desktop -r "$RID" --self-contained true \
+            -p:TextSpaceDesktopOnly=true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:IncludeAllContentForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION" \
+            -o "artifacts/desktop/$RID"
+      - name: Package executable
+        shell: bash
+        run: |
+          OUT="artifacts/desktop/$RID"
+          find "$OUT" -name '*.pdb' -delete
+          mkdir -p artifacts/dist
+          BASE="$APP_NAME-$VERSION-$RID"
+          if [[ "$RID" == win-* ]]; then
+            mv "$OUT/$APP_NAME.App.exe" "$OUT/$APP_NAME.exe"
+            test "$(find "$OUT" -type f | wc -l)" -eq 1
+            (cd "$OUT" && zip -q "$GITHUB_WORKSPACE/artifacts/dist/$BASE.zip" "$APP_NAME.exe")
+          else
+            mv "$OUT/$APP_NAME.App" "$OUT/$APP_NAME"
+            chmod +x "$OUT/$APP_NAME"
+            test "$(find "$OUT" -type f | wc -l)" -eq 1
+            tar -C "$OUT" -czf "artifacts/dist/$BASE.tar.gz" "$APP_NAME"
+          fi
+          ls -la artifacts/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
+          path: artifacts/dist/*
+          if-no-files-found: error
+
   package:
+    needs: [version, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,7 +108,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ needs.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +146,11 @@ jobs:
           for component in Core Documents Editing Layout Skia OpenXml Storage Controls Editor Workbench; do
             dotnet pack "src/TextSpace.$component/TextSpace.$component.csproj" -c Release -p:Version="$VERSION" -p:PackageVersion="$VERSION" -o artifacts/release
           done
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: artifacts/release
+          merge-multiple: true
       - name: Assemble source and verified browser archives
         env:
           SOURCE_RUN: ${{ steps.source.outputs.run }}
@@ -83,7 +164,7 @@ jobs:
           from pathlib import Path
           root=Path('artifacts/release')
           shutil.make_archive(str(root/f'TextSpace-{os.environ["VERSION"]}-browser'),'zip','artifacts/site')
-          info={'version':os.environ['VERSION'],'sourceCommit':os.environ['SOURCE_SHA'],'validatedBuildRun':os.environ['SOURCE_RUN'],'browserBasePath':'/TextSpace/','nugetPublication':'separate opt-in job'}
+          info={'version':os.environ['VERSION'],'sourceCommit':os.environ['SOURCE_SHA'],'validatedBuildRun':os.environ['SOURCE_RUN'],'browserBasePath':'/TextSpace/','nugetPublication':'trusted publishing for version tags'}
           (root/'release-info.json').write_text(json.dumps(info,indent=2)+'\n')
           (root/'SHA256SUMS.txt').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name for p in sorted(root.iterdir()) if p.is_file())+'\n')
           PY
@@ -91,6 +172,13 @@ jobs:
         with:
           name: TextSpace-release-${{ steps.source.outputs.version }}
           path: artifacts/release
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            artifacts/release/*.nupkg
+            artifacts/release/*.snupkg
           if-no-files-found: error
     outputs:
       version: ${{ steps.source.outputs.version }}
@@ -117,24 +205,33 @@ jobs:
           if [[ "$VERSION" == *-* ]]; then FLAGS+=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "TextSpace $VERSION" --generate-notes "${FLAGS[@]}"
   nuget:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_nuget
-    needs: package
+    name: Publish to NuGet.org (Trusted Publishing)
+    needs: [package, publish]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: nuget
+    permissions:
+      id-token: write
+      contents: read
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: packages
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/download-artifact@v4
-        with:
-          name: TextSpace-release-${{ needs.package.outputs.version }}
-          path: release
-      - name: Publish explicitly requested packages
-        shell: bash
+      - name: Check NuGet user
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "$NUGET_API_KEY" || { echo 'Configure NUGET_API_KEY in the nuget environment before requesting publication.'; exit 1; }
-          (cd release && sha256sum --check SHA256SUMS.txt)
-          dotnet nuget push 'release/*.nupkg' --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+          NUGET_USER: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+        run: test -n "$NUGET_USER" || { echo 'Set the NUGET_USER variable (your nuget.org profile name) for this repository or its nuget environment.' >&2; exit 1; }
+      - name: NuGet login (OIDC → short-lived API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER || secrets.NUGET_USER }}
+      - name: Push packages
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
