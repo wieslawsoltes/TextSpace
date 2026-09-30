@@ -7,7 +7,7 @@ import { chromium } from '@playwright/test';
 const base = (process.env.TEXTSPACE_BASE_URL || 'http://127.0.0.1:4173/TextSpace/').replace(/\/?$/, '/');
 const output = 'test-results/object-navigation';
 await fs.mkdir(output, { recursive: true });
-const report = { base, checks: [], errors: [] };
+const report = { base, checks: [], errors: [], cropGestures: [] };
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, acceptDownloads: true });
 page.on('filechooser', () => {});
@@ -43,6 +43,30 @@ async function open(path, expectedId) {
   await until(async () => !(await state()).dialog && (await state()).visuals.objects.some(o => o.id === expectedId), 'Native fixture did not open');
 }
 async function check(name, action) { await action(); report.checks.push(name); console.log('PASS OBJECT NAVIGATION', name); }
+async function cropDrag(id, handleName, rotation, dx, dy) {
+  // A command can complete before the read-only diagnostics timer publishes its
+  // new handle coordinates. Never start a drag from pre-rotation geometry.
+  await until(async () => {
+    const s = await state(); const image = s.visuals.objects.find(o => o.id === id);
+    return s.visuals.selected === id && s.visuals.cropping && !s.visuals.gesture && image?.rotation === rotation;
+  }, 'Crop transform and selection were not ready');
+  const before = await state(); const image = before.visuals.objects.find(o => o.id === id);
+  const handle = image.handles.find(h => h.handle === handleName); assert.ok(handle);
+  const record = { id, handleName, rotation, from: handle, dx, dy, revision: before.revision };
+  report.cropGestures.push(record);
+  await page.mouse.move(handle.x, handle.y); await page.mouse.down();
+  await until(async () => (await state()).visuals.gesture, 'Pointer did not capture a crop gesture');
+  await page.mouse.move(handle.x + dx, handle.y + dy, { steps: 8 });
+  await until(async () => (await state()).visuals.gesture, 'Crop preview ended before release');
+  assert.equal((await state()).revision, before.revision, 'Crop preview changed document history');
+  await page.mouse.up();
+  await until(async () => !(await state()).visuals.gesture && (await state()).revision === before.revision + 1, 'Crop did not commit exactly one edit');
+  const after = (await state()).visuals.objects.find(o => o.id === id);
+  record.after = { x: after.x, y: after.y, width: after.width, height: after.height };
+  assert.equal(after.x, image.x, 'Cropping moved the picture instead of its source edge');
+  assert.equal(after.y, image.y, 'Cropping moved the picture instead of its source edge');
+  assert.equal(after.width, image.width); assert.equal(after.height, image.height);
+}
 function png() {
   const crc = bytes => { let c = 0xffffffff; for (const b of bytes) { c ^= b; for (let i = 0; i < 8; i++) c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1; } return (c ^ 0xffffffff) >>> 0; };
   const chunk = (name, data) => { const body = Buffer.concat([Buffer.from(name), data]); const size = Buffer.alloc(4); size.writeUInt32BE(data.length); const sum = Buffer.alloc(4); sum.writeUInt32BE(crc(body)); return Buffer.concat([size, body, sum]); };
@@ -116,24 +140,24 @@ try {
     const id = (await state()).visuals.objects.find(o => o.kind === 'Picture').id;
     await click('Home tab'); await click('Selection Pane'); await click('Select object: ' + id); await click('Close Selection');
     await click('Rotate'); await click('Flip Horizontal'); await click('crop-picture');
-    let image = (await state()).visuals.objects.find(o => o.id === id); let handle = image.handles.find(h => h.handle === 'West');
-    await page.mouse.move(handle.x, handle.y); await page.mouse.down(); await page.mouse.move(handle.x + 16, handle.y, { steps: 8 }); await page.mouse.up();
-    await until(async () => !(await state()).visuals.gesture, 'Crop did not commit');
+    await cropDrag(id, 'West', 0, 16, 0);
     let saved = await save('flipped-crop'); let picture = saved.blocks.find(b => b.id === id);
     assert.ok(picture.crop.right > 0); assert.equal(picture.crop.left, 0); assert.equal(Buffer.from(picture.data, 'base64').compare(source), 0);
     await click('Rotate'); await click('Flip Vertical'); await click('Rotate'); await click('Rotate Right 90°');
-    image = (await state()).visuals.objects.find(o => o.id === id); handle = image.handles.find(h => h.handle === 'North');
-    await page.mouse.move(handle.x, handle.y); await page.mouse.down(); await page.mouse.move(handle.x - 12, handle.y, { steps: 8 }); await page.mouse.up();
-    await until(async () => !(await state()).visuals.gesture, 'Rotated crop did not commit');
+    await until(async () => (await state()).visuals.objects.find(o => o.id === id)?.rotation === 90, 'Rotation command did not finish');
+    const rotated = (await save('before-rotated-crop')).blocks.find(b => b.id === id);
+    assert.equal(rotated.placement.flipHorizontal, true); assert.equal(rotated.placement.flipVertical, true); assert.equal(rotated.placement.rotation, 90);
+    await cropDrag(id, 'North', 90, -12, 0);
     saved = await save('rotated-flipped-crop'); picture = saved.blocks.find(b => b.id === id);
     assert.ok(picture.crop.bottom > 0); assert.equal(picture.crop.top, 0); assert.ok(picture.crop.right > 0);
+    assert.deepEqual(picture.placement, rotated.placement, 'Cropping unexpectedly changed placement');
     assert.equal(Buffer.from(picture.data, 'base64').compare(source), 0);
     await page.screenshot({ path: output + '/flipped-crop.png' });
   });
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;
-  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ active: document.activeElement?.outerHTML, text: document.activeElement?.value })).catch(() => null);
+  report.state = await state().catch(() => null); report.input = await page.evaluate(() => ({ focused: document.hasFocus(), active: document.activeElement?.outerHTML, text: document.activeElement?.value })).catch(() => null);
   await page.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));

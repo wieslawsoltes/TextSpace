@@ -23,15 +23,20 @@ public sealed partial class WordWorkbench
                 new RibbonButton("up", "Previous Object", () => Surface.SelectNextObject(true)),
                 new RibbonButton("down", "Next Object", () => Surface.SelectNextObject())));
     }
+    private void ReleaseObjectSelectionRows()
+    {
+        // A closed or displaced pane must not retain the previous document's
+        // image bytes through its list of VisualObjectLocation references.
+        _objectListSource = null; _objectMatches.Clear();
+        _objectSelectionButtons.Clear(); _objectSelectionRows?.Children.Clear();
+    }
     private void ShowObjectSelectionPane()
     {
-        // Reuse the right task-pane slot without attaching a second review pane.
-        // The dedicated pane preserves its filter and bounds the materialized UI.
         if (_objectSelectionPane is not null && ReferenceEquals(_reviewHost.Child, _objectSelectionPane)) return;
-        SetReview(false, "Selection");
+        ReleaseObjectSelectionRows(); SetReview(false, "Selection");
         var pane = new OfficeTaskPane("Selection", 310);
-        _objectSelectionPane = pane; _reviewMode = "Selection"; _reviewVisible = true; _objectListSource = null;
-        pane.CloseRequested += () => { _objectSelectionPane = null; _objectSelectionButtons.Clear(); SetReview(false, "Selection"); Surface.FocusEditor(); };
+        _objectSelectionPane = pane; _reviewMode = "Selection"; _reviewVisible = true;
+        pane.CloseRequested += () => { ReleaseObjectSelectionRows(); _objectSelectionPane = null; SetReview(false, "Selection"); Surface.FocusEditor(); };
         var filter = OfficeTheme.Field("Find object", _objectFilter); filter.PlaceholderText = "Find a shape, equation, picture…";
         filter.TextChanged += (_, _) => { _objectFilter = filter.Text; _objectListPage = 0; _objectListSource = null; RefreshObjectSelectionPane(); };
         _objectSelectionStatus = OfficeTheme.Text("", 11, OfficeTheme.Muted);
@@ -51,7 +56,11 @@ public sealed partial class WordWorkbench
     }
     private void RefreshObjectSelectionPane()
     {
-        if (_objectSelectionPane is null || !ReferenceEquals(_reviewHost.Child, _objectSelectionPane)) return;
+        if (_objectSelectionPane is null || !ReferenceEquals(_reviewHost.Child, _objectSelectionPane))
+        {
+            if (_objectListSource is not null || _objectSelectionButtons.Count != 0) ReleaseObjectSelectionRows();
+            return;
+        }
         var source = Surface.ObjectLocations;
         if (!ReferenceEquals(source, _objectListSource))
         {
@@ -63,7 +72,9 @@ public sealed partial class WordWorkbench
                 var text = block switch { ShapeBlock s => s.Text, EquationBlock e => e.Root.ToLinearText(), ImageBlock image => image.AltText, _ => "" };
                 var fullLabel = kind + " · Page " + (location.PageIndex + 1) + (text.Length == 0 ? "" : " · " + text);
                 if (_objectFilter.Length > 0 && !fullLabel.Contains(_objectFilter, StringComparison.OrdinalIgnoreCase) && !block.Id.Contains(_objectFilter, StringComparison.OrdinalIgnoreCase)) continue;
-                var excerpt = text[..Math.Min(80, text.Length)].Replace('\r', ' ').Replace('\n', ' ');
+                var length = Math.Min(80, text.Length);
+                if (length < text.Length && length > 0 && char.IsHighSurrogate(text[length - 1])) length--;
+                var excerpt = text[..length].Replace('\r', ' ').Replace('\n', ' ');
                 _objectMatches.Add((block.Id, kind + " · Page " + (location.PageIndex + 1) + (excerpt.Length == 0 ? "" : "\n" + excerpt)));
             }
             RenderObjectSelectionPage();

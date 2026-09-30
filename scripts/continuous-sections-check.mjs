@@ -9,6 +9,7 @@ const report = { base, checks: [], errors: [] };
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
 const page = await context.newPage();
+page.on('filechooser', () => {});
 page.on('pageerror', error => report.errors.push(error.message));
 const state = () => page.evaluate(() => globalThis.__textSpaceState);
 async function until(condition, message, timeout = 30000) {
@@ -27,8 +28,22 @@ async function click(name) {
 async function ready(value = null, tag = 'TEXTAREA') {
   await until(() => page.evaluate(({ value, tag }) => {
     const e = document.activeElement;
-    return e?.id === 'uno-input' && e.tagName === tag && !e.readOnly && (value === null || e.value === value);
+    return document.hasFocus() && e?.id === 'uno-input' && e.tagName === tag && !e.readOnly && (value === null || e.value === value);
   }, { value, tag }), 'Native input not ready: ' + tag);
+}
+async function focusPaper() {
+  // Startup data is observable before the workbench is attached and arranged.
+  // Wait for the actual viewport before obtaining coordinates for real input.
+  await page.bringToFront();
+  await until(async () => {
+    const s = await state(); const c = s?.canvas;
+    return c && c.width > 300 && c.height > 200 && Number.isFinite(c.paperLeft) && c.scale > 0;
+  }, 'Recovered paper viewport was not arranged');
+  const s = await state(); const c = s.canvas;
+  const x = c.x + c.paperLeft + 75 * c.scale;
+  const y = c.y + 18 + 75 * c.scale - c.scrollY;
+  assert.ok(x > c.x && x < c.x + c.width && y > c.y && y < c.y + c.height, 'Paper focus point is outside the visible canvas');
+  await page.mouse.click(x, y);
 }
 async function fill(name, value) { await click(name); await ready(null, 'INPUT'); await page.keyboard.press('Control+a'); await page.keyboard.insertText(value); await ready(value, 'INPUT'); }
 async function blank() {
@@ -103,7 +118,7 @@ try {
   await check('DOCX reimport preserves same-page and next-column semantics', async () => {
     await click('File tab'); await click('File Export'); const pending = page.waitForEvent('download'); await click('Word document');
     const download = await pending; await download.saveAs(output + '/same-page.docx');
-    await click('Back to document'); await ready((await state()).text);
+    await click('Back to document'); await focusPaper(); await ready((await state()).text);
     const chooser = page.waitForEvent('filechooser'); await page.keyboard.press('Control+o'); await (await chooser).setFiles(output + '/same-page.docx');
     await page.waitForTimeout(500); if ((await state()).dialog) await click('Continue without a copy');
     await until(async () => !(await state()).dialog && (await state()).sections === 4, 'DOCX import did not finish');
@@ -125,18 +140,17 @@ try {
     await page.waitForFunction(() => globalThis.__textSpaceState?.pageGeometry?.[0]?.regions, null, { timeout: 150000 });
     await until(async () => (await state()).text === before, 'Recovery text mismatch');
     const s = await state(); assert.equal(s.pages, 1); assert.equal(s.pageGeometry[0].regions[0].balanced, true);
-    await page.mouse.click(s.canvas.x + s.canvas.paperLeft + 75 * s.canvas.scale, s.canvas.y + 18 + 75 * s.canvas.scale - s.canvas.scrollY);
-    await ready(before); const saved = await saveNative('recovered');
+    await focusPaper(); await ready(before); const saved = await saveNative('recovered');
     assert.equal(saved.blocks.find(b => b.$type === 'sectionBreak').kind, 'Continuous');
   });
   assert.deepEqual(report.errors, []); report.success = true;
 } catch (error) {
   report.success = false; report.failure = String(error.stack || error); process.exitCode = 1;
   report.state = await state().catch(() => null);
-  report.input = await page.evaluate(() => ({ active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
+  report.input = await page.evaluate(() => ({ focused: document.hasFocus(), active: document.activeElement?.outerHTML, value: document.activeElement?.value })).catch(() => null);
   await page.screenshot({ path: output + '/failure.png' }).catch(() => {}); console.error(error);
 } finally {
   await fs.writeFile(output + '/report.json', JSON.stringify(report, null, 2));
-  console.log('CONTINUOUS ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, failure: report.failure }));
+  console.log('CONTINUOUS ACCEPTANCE', JSON.stringify({ success: report.success, checks: report.checks, failure: report.failure, input: report.input, state: report.success ? undefined : report.state }));
   await browser.close();
 }
