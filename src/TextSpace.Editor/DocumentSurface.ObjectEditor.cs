@@ -37,7 +37,7 @@ public sealed partial class DocumentSurface
             text.MinHeight = 100; text.MaxHeight = 300; text.FontSize = Math.Clamp(shape.TextStyle.FontSize * Scale, 10, 60);
             text.TextChanged += (_, _) => { if (_objectDraft?.Value is ShapeBlock draft) draft.Text = text.Text; };
             var apply = new OfficeButton { Content = "Done", IsPrimary = true, Padding = new(12, 5) }; AutomationProperties.SetName(apply, "Apply shape text"); apply.Click += (_, _) => ApplyObjectEditor();
-            var cancel = new OfficeButton { Content = "Cancel", Padding = new(12, 5) }; cancel.Click += (_, _) => { CancelObjectEditor(); FocusEditor(); };
+            var cancel = new OfficeButton { Content = "Cancel", Padding = new(12, 5) }; AutomationProperties.SetName(cancel, "Cancel shape text"); cancel.Click += (_, _) => { CancelObjectEditor(); FocusEditor(); };
             text.PreviewKeyDown += (_, e) =>
             {
                 if (e.Key == VirtualKey.Escape) { CancelObjectEditor(); FocusEditor(); e.Handled = true; }
