@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Preserve diagnostics without converting a test failure into success.
+// Exercise the new interaction path early, but always run every existing suite.
+// A failure remains a failure: no skipped suite or swallowed exit code.
 const suites = [
-  'browser-check.mjs', 'keyboard-input-check.mjs', 'document-feature-check.mjs',
-  'sections-fields-check.mjs', 'typography-check.mjs', 'tables-check.mjs',
-  'continuous-sections-check.mjs', 'recovery-check.mjs', 'visual-editing-check.mjs'
+  'browser-check.mjs', 'visual-editing-check.mjs', 'keyboard-input-check.mjs',
+  'document-feature-check.mjs', 'sections-fields-check.mjs', 'typography-check.mjs',
+  'tables-check.mjs', 'continuous-sections-check.mjs', 'recovery-check.mjs'
 ];
 let failed = false;
 for (const suite of suites) {
