@@ -30,6 +30,10 @@ public sealed partial class DocumentSurface
         {
             var shape = (ShapeBlock)_objectDraft.Value;
             var text = OfficeTheme.Field("Shape text"); text.Text = shape.Text; text.AcceptsReturn = true; text.TextWrapping = TextWrapping.Wrap;
+            text.MaxLength = 100000;
+            text.FontFamily = new FontFamily(shape.TextStyle.FontFamily);
+            text.FontWeight = new() { Weight = (ushort)(shape.TextStyle.Bold ? 700 : 400) };
+            text.FontStyle = shape.TextStyle.Italic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
             text.MinHeight = 100; text.MaxHeight = 300; text.FontSize = Math.Clamp(shape.TextStyle.FontSize * Scale, 10, 60);
             text.TextChanged += (_, _) => { if (_objectDraft?.Value is ShapeBlock draft) draft.Text = text.Text; };
             var apply = new OfficeButton { Content = "Done", IsPrimary = true, Padding = new(12, 5) }; AutomationProperties.SetName(apply, "Apply shape text"); apply.Click += (_, _) => ApplyObjectEditor();
@@ -67,9 +71,10 @@ public sealed partial class DocumentSurface
                 var ratio = Math.Min(1, Math.Min(4000 / measured.Width, 4000 / measured.Height));
                 equation.Width = Math.Max(6, measured.Width * ratio); equation.Height = Math.Max(6, measured.Height * ratio);
             }
+            if (!draft.IsCurrent || Session.IsReadOnly) throw new InvalidOperationException("The document changed while the object editor was open. Copy your text before closing the editor.");
             VisualBlockRules.Validate(draft.Value);
             // Remove the editor before the single document notification is published.
-            _objectDraft = null; RemoveObjectEditor(); draft.Commit(draft.Value is EquationBlock ? "Edit equation" : "Edit shape text"); draft.Dispose();
+            _objectDraft = null; RemoveObjectEditor(); try { draft.Commit(draft.Value is EquationBlock ? "Edit equation" : "Edit shape text"); } finally { draft.Dispose(); }
             FocusEditor();
         }
         catch (Exception ex) { Error?.Invoke(ex.Message); }
@@ -80,7 +85,7 @@ public sealed partial class DocumentSurface
     }
     private void RemoveObjectEditor()
     {
-        var editor = _objectEditor; _objectEditor = null; _equationEditor = null;
+        var editor = _objectEditor; _objectEditor = null; _equationEditor?.Dispose(); _equationEditor = null;
         if (editor is not null) { _viewport.Children.Remove(editor); ObjectSelectionChanged?.Invoke(); Invalidate(); }
     }
 }

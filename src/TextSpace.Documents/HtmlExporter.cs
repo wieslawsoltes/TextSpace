@@ -6,7 +6,7 @@ using TextSpace.Core;
 namespace TextSpace.Documents;
 
 /// <summary>Self-contained, non-executing HTML with safe links and named bookmark targets.</summary>
-public static class HtmlExporter
+public static partial class HtmlExporter
 {
     private static string Esc(string value) => WebUtility.HtmlEncode(value);
     private static string N(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
@@ -112,8 +112,10 @@ public static class HtmlExporter
                             body.Append("</tr>");
                         }
                         body.Append("</table>"); break;
+                    case ShapeBlock shape: body.Append(ExportVisual(shape)); break;
+                    case EquationBlock equation: body.Append(ExportVisual(equation)); break;
                     case ImageBlock image when image.ContentType is "image/png" or "image/jpeg" or "image/gif":
-                        body.Append("<img alt=\"").Append(Esc(image.AltText)).Append("\" style=\"max-width:100%;width:").Append(N(image.Width)).Append("pt\" src=\"data:").Append(image.ContentType).Append(";base64,").Append(Convert.ToBase64String(image.Data)).Append("\">"); break;
+                        body.Append(ExportVisual(image)); break;
                     case PageBreakBlock: body.Append("<div style=\"break-after:page\"></div>"); break;
                     case ColumnBreakBlock: body.Append("<div style=\"break-after:column\"></div>"); break;
                 }
@@ -129,7 +131,7 @@ public static class HtmlExporter
             if (kind is not (SectionBreakKind.Continuous or SectionBreakKind.NextColumn) || !samePaper) pageName = number;
             styles.Append("@page section").Append(number).Append("{size:").Append(N(page.Width)).Append("pt ").Append(N(page.Height)).Append("pt;margin:")
                 .Append(N(page.MarginTop)).Append("pt ").Append(N(page.MarginRight)).Append("pt ").Append(N(page.MarginBottom)).Append("pt ").Append(N(page.MarginLeft)).Append("pt}");
-            body.Append("<section data-section-start=\"").Append(kind?.ToString() ?? "First").Append("\" style=\"page:section").Append(pageName).Append(";max-width:").Append(N(page.ContentWidth)).Append("pt;margin:0 auto;column-count:").Append(page.Columns).Append(";column-gap:").Append(N(page.ColumnGap)).Append("pt;");
+            body.Append("<section data-section-start=\"").Append(kind?.ToString() ?? "First").Append("\" style=\"page:section").Append(pageName).Append(";max-width:").Append(N(page.ContentWidth)).Append("pt;margin:0 auto;position:relative;column-count:").Append(page.Columns).Append(";column-gap:").Append(N(page.ColumnGap)).Append("pt;");
             if (kind is not null) body.Append("break-before:").Append(kind == SectionBreakKind.OddPage ? "right" : kind == SectionBreakKind.EvenPage ? "left"
                 : samePaper && kind == SectionBreakKind.Continuous ? "auto" : samePaper && kind == SectionBreakKind.NextColumn ? "column" : "page").Append(';');
             body.Append("\">"); Blocks(blocks); body.Append("</section>"); blocks.Clear(); number++;

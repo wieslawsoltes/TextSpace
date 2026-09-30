@@ -55,10 +55,27 @@ public sealed partial class DocumentSurface
         if (Session.IsReadOnly || SelectedObject is not ImageBlock) return;
         _cropMode = !_cropMode; Invalidate(); ObjectSelectionChanged?.Invoke(); FocusEditor();
     }
+    private DocumentLayout? _indexedVisualLayout;
+    private readonly Dictionary<string, (int Page, LayoutObject Item)> _visualLocations = new(StringComparer.Ordinal);
     private (int Page, LayoutObject Item)? SelectedPlacement()
     {
-        foreach (var item in VisualObjects()) if (!item.Item.IsReplica && item.Item.Object.Id == _selectedObjectId) return item;
-        return null;
+        if (_selectedObjectId is null) return null;
+        if (!ReferenceEquals(_indexedVisualLayout, Layout))
+        {
+            _visualLocations.Clear();
+            foreach (var item in VisualObjects()) if (!item.Item.IsReplica) _visualLocations.TryAdd(item.Item.Object.Id, item);
+            _indexedVisualLayout = Layout;
+        }
+        return _visualLocations.TryGetValue(_selectedObjectId, out var value) ? value : null;
+    }
+    private IEnumerable<(int Page, LayoutObject Item)> PageVisualObjects(int index)
+    {
+        var page = Layout.Pages[index];
+        if (page.Objects.Count > 0)
+        {
+            foreach (var item in page.Objects) yield return (index, item);
+        }
+        else foreach (var image in page.Images) yield return (index, new LayoutObject(image.Image, image.Bounds) { IsReplica = image.IsReplica });
     }
     private Point PagePoint(Point point, int page) => new((point.X - PaperLeft) / Scale - Layout.PageLeft(page),
         (point.Y - 18 + _scrollY) / Scale - Layout.PageTop(page));
@@ -90,7 +107,7 @@ public sealed partial class DocumentSurface
             }
         }
         var page = Layout.PageAtY((position.Y - 18 + _scrollY) / Scale); var pagePoint = PagePoint(position, page);
-        var items = VisualObjects().Where(i => i.Page == page && !i.Item.IsReplica).ToArray();
+        var items = PageVisualObjects(page).Where(i => !i.Item.IsReplica).ToArray();
         var hit = items.Reverse().FirstOrDefault(i => i.Item.Object.Placement.Floating && ContainsVisual(i.Item, pagePoint));
         if (hit.Item is null) hit = items.Reverse().FirstOrDefault(i => ContainsVisual(i.Item, pagePoint));
         if (hit.Item is null) return false;
@@ -181,7 +198,7 @@ public sealed partial class DocumentSurface
     private bool TryVisualDoubleTap(Point point)
     {
         var page = Layout.PageAtY((point.Y - 18 + _scrollY) / Scale); var p = PagePoint(point, page);
-        var item = VisualObjects().Reverse().FirstOrDefault(i => i.Page == page && !i.Item.IsReplica && ContainsVisual(i.Item, p));
+        var item = PageVisualObjects(page).Reverse().FirstOrDefault(i => !i.Item.IsReplica && ContainsVisual(i.Item, p));
         if (item.Item is null) return false;
         CancelVisualGesture(); SelectObject(item.Item.Object.Id);
         if (item.Item.Object is ShapeBlock or EquationBlock) BeginObjectEditor(); else ToggleCrop(); return true;
@@ -221,7 +238,7 @@ public sealed partial class DocumentSurface
         var item = selected.Value.Item; var block = item.Object; var bounds = item.Bounds;
         if (_visualGesture is { } gesture)
         {
-            block = gesture.Draft.Value; bounds = gesture.Bounds; Renderer.InvalidateVisualLayout(block.Id); Renderer.DrawVisualBlock(canvas, block, bounds);
+            block = gesture.Draft.Value; bounds = gesture.Bounds; Renderer.DrawVisualBlock(canvas, block, bounds);
             using var guide = new SKPaint { Color = SKColor.Parse("#D347B7"), StrokeWidth = (float)(1 / Scale), IsAntialias = true };
             if (gesture.GuideX is { } x) canvas.DrawLine((float)x, 0, (float)x, (float)Layout.Pages[page].Settings.Height, guide);
         }

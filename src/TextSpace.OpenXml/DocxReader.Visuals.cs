@@ -143,7 +143,7 @@ public sealed partial class DocxReader
             // export snapshot. Editing the standard frame in Word takes precedence.
             var standardX = Number((string?)native.Attribute("standardX"), double.NaN);
             var standardY = Number((string?)native.Attribute("standardY"), double.NaN);
-            if (double.IsFinite(nativeX + nativeY + standardX + standardY) && Math.Abs(x - standardX) < 0.051 && Math.Abs(y - standardY) < 0.051)
+            if ((floating || result.Alignment == alignment) && double.IsFinite(nativeX + nativeY + standardX + standardY) && Math.Abs(x - standardX) < 0.051 && Math.Abs(y - standardY) < 0.051)
             { result.Alignment = alignment; x = nativeX; y = nativeY; }
             if (result is ShapeBlock rectangle && rectangle.Kind == ShapeKind.Rectangle && (string?)native.Attribute("kind") == "TextBox") rectangle.Kind = ShapeKind.TextBox;
         }

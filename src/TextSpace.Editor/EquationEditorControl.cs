@@ -11,7 +11,7 @@ namespace TextSpace.Editor;
 /// at its measured position; structure, layout and navigation use the same tree.
 /// It owns a detached draft and never writes to an EditorSession by itself.
 /// </summary>
-public sealed class EquationEditorControl : UserControl
+public sealed class EquationEditorControl : UserControl, IDisposable
 {
     private sealed class EquationCanvas : SKCanvasElement
     {
@@ -29,11 +29,18 @@ public sealed class EquationEditorControl : UserControl
     private EquationNode _root;
     private EquationLayout _layout;
     private string? _active;
-    private bool _syncing, _pending;
+    private bool _syncing, _pending, _disposed;
     private const double DisplayScale = 1.5;
     private const double PaddingPoints = 14;
     public double EquationFontSize { get; }
-    public EquationNode Value => _root.Clone();
+    public EquationNode Value
+    {
+        get
+        {
+            if (!CaptureInput()) throw new InvalidOperationException("Correct the equation input before applying it.");
+            return _root.Clone();
+        }
+    }
     public EquationLayout Geometry => _layout;
     public string? ActiveSlot => _active;
     public event Action? CommitRequested;
@@ -64,7 +71,7 @@ public sealed class EquationEditorControl : UserControl
             AutomationProperties.SetName(button, "Equation " + label); button.Click += (_, _) => InsertStructure(template); templates.Children.Add(button);
         }
         var done = new OfficeButton { Content = "Done", IsPrimary = true, Padding = new(12, 5) };
-        AutomationProperties.SetName(done, "Apply equation"); done.Click += (_, _) => { CaptureInput(); CommitRequested?.Invoke(); };
+        AutomationProperties.SetName(done, "Apply equation"); done.Click += (_, _) => { if (CaptureInput()) CommitRequested?.Invoke(); };
         var cancel = new OfficeButton { Content = "Cancel", Padding = new(12, 5) }; AutomationProperties.SetName(cancel, "Cancel equation"); cancel.Click += (_, _) => CancelRequested?.Invoke();
         var undo = new OfficeButton { Content = "Undo", Padding = new(8, 5) }; undo.Click += (_, _) => Restore(false);
         var redo = new OfficeButton { Content = "Redo", Padding = new(8, 5) }; redo.Click += (_, _) => Restore(true);
@@ -78,11 +85,13 @@ public sealed class EquationEditorControl : UserControl
         Loaded += (_, _) => Activate(_active); Rebuild();
     }
 
-    private void CaptureInput()
+    private bool CaptureInput()
     {
-        if (_syncing || _active is null) return;
+        if (_disposed) return false;
+        if (_syncing || _active is null) return true;
         var current = _root.DescendantsAndSelf().FirstOrDefault(n => n.Id == _active && n.Kind == EquationKind.Text);
-        if (current is null || current.Text == _input.Text) return;
+        if (current is null) return false;
+        if (current.Text == _input.Text) return true;
         var candidate = _root.Clone(); var node = candidate.DescendantsAndSelf().First(n => n.Id == _active); node.Text = _input.Text;
         try
         {
@@ -90,10 +99,11 @@ public sealed class EquationEditorControl : UserControl
             // Let native TextBox finish selection/composition before moving its visual bounds.
             if (!_pending)
             {
-                _pending = true; DispatcherQueue.TryEnqueue(() => { _pending = false; Rebuild(syncText: false); DraftChanged?.Invoke(); });
+                _pending = true; DispatcherQueue.TryEnqueue(() => { _pending = false; if (_disposed) return; Rebuild(syncText: false); DraftChanged?.Invoke(); });
             }
+            return true;
         }
-        catch (Exception ex) { _status.Text = ex.Message; }
+        catch (Exception ex) { _status.Text = ex.Message; return false; }
     }
     private void Remember()
     {
@@ -109,7 +119,7 @@ public sealed class EquationEditorControl : UserControl
     {
         try
         {
-            CaptureInput(); var slot = _root.DescendantsAndSelf().FirstOrDefault(n => n.Id == _active && n.Kind == EquationKind.Text); if (slot is null) return;
+            if (!CaptureInput()) return; var slot = _root.DescendantsAndSelf().FirstOrDefault(n => n.Id == _active && n.Kind == EquationKind.Text); if (slot is null) return;
             var start = Math.Clamp(_input.SelectionStart, 0, slot.Text.Length); var length = Math.Clamp(_input.SelectionLength, 0, slot.Text.Length - start);
             var structure = EquationTemplates.Create(template, EquationNode.Leaf(slot.Text.Substring(start, length)));
             var before = slot.Text[..start]; var after = slot.Text[(start + length)..];
@@ -128,6 +138,7 @@ public sealed class EquationEditorControl : UserControl
     }
     private void Rebuild(bool syncText = true)
     {
+        if (_disposed) return;
         try { _layout = _renderer.MeasureEquation(_root, EquationFontSize); }
         catch (Exception ex) { _status.Text = ex.Message; return; }
         if (!_layout.Slots.Any(s => s.Id == _active)) _active = _layout.Slots.FirstOrDefault()?.Id;
@@ -151,7 +162,7 @@ public sealed class EquationEditorControl : UserControl
     }
     private void Activate(string? id)
     {
-        CaptureInput(); _active = id; Rebuild(); FocusSlot(); _input.SelectAll();
+        if (!CaptureInput()) return; _active = id; Rebuild(); FocusSlot(); _input.SelectAll();
     }
     public IReadOnlyList<EquationSlotDiagnostic> CaptureSlotDiagnostics(UIElement relativeTo)
     {
@@ -162,7 +173,8 @@ public sealed class EquationEditorControl : UserControl
             return new EquationSlotDiagnostic(slot.Id, slot.Role, slot.Text, p.X, p.Y, slot.Bounds.Width * DisplayScale, slot.Bounds.Height * DisplayScale, slot.Id == _active);
         }).ToArray();
     }
-    public void FocusSlot() => _input.Focus(FocusState.Programmatic);
+    public void FocusSlot() { if (!_disposed) _input.Focus(FocusState.Programmatic); }
+    public void Dispose() { _disposed = true; _canvas.Paint = null; }
     private void Paint(SKCanvas canvas)
     {
         canvas.Clear(SKColors.White); canvas.Save(); canvas.Scale((float)DisplayScale); canvas.Translate((float)PaddingPoints, (float)PaddingPoints);
@@ -172,7 +184,7 @@ public sealed class EquationEditorControl : UserControl
     {
         var control = DocumentSurface.ControlDown(); var shift = DocumentSurface.KeyDown(VirtualKey.Shift);
         if (e.Key == VirtualKey.Escape) { CancelRequested?.Invoke(); e.Handled = true; return; }
-        if (control && e.Key == VirtualKey.Enter) { CaptureInput(); CommitRequested?.Invoke(); e.Handled = true; return; }
+        if (control && e.Key == VirtualKey.Enter) { if (CaptureInput()) CommitRequested?.Invoke(); e.Handled = true; return; }
         if (control && e.Key is VirtualKey.Z or VirtualKey.Y) { Restore(e.Key == VirtualKey.Y || shift); e.Handled = true; return; }
         if (e.Key == VirtualKey.Tab)
         {

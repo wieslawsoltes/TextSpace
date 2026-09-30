@@ -6,19 +6,12 @@ namespace TextSpace.Skia;
 
 public sealed partial class DocumentRenderer
 {
-    private readonly Dictionary<string, (EquationNode Root, double Size, EquationLayout Layout)> _equationLayouts = [];
-    private readonly Dictionary<string, (ShapeBlock Source, IReadOnlyList<VisualTextLine> Lines)> _shapeLayouts = [];
-
-    public void ClearVisualLayouts() { _equationLayouts.Clear(); _shapeLayouts.Clear(); }
-    public void InvalidateVisualLayout(string id) { _equationLayouts.Remove(id); _shapeLayouts.Remove(id); }
+    private VisualLayoutCache? _visualLayouts;
+    public VisualLayoutCache VisualLayouts => _visualLayouts ??= new(Metrics);
+    public void ClearVisualLayouts() => _visualLayouts?.Clear();
+    public void InvalidateVisualLayout(string id) => _visualLayouts?.Invalidate(id);
     public EquationLayout MeasureEquation(EquationNode root, double fontSize = 18) => new EquationLayouter(Metrics).Layout(root, fontSize);
-    public EquationLayout MeasureEquation(EquationBlock equation)
-    {
-        if (_equationLayouts.TryGetValue(equation.Id, out var found) && ReferenceEquals(found.Root, equation.Root) && found.Size == equation.FontSize) return found.Layout;
-        var measured = MeasureEquation(equation.Root, equation.FontSize);
-        if (_equationLayouts.Count >= 128) _equationLayouts.Clear();
-        _equationLayouts[equation.Id] = (equation.Root, equation.FontSize, measured); return measured;
-    }
+    public EquationLayout MeasureEquation(EquationBlock equation) => VisualLayouts.GetEquation(equation);
 
     private void DrawVisualObjects(SKCanvas canvas, LayoutPage page, RenderOptions options, bool floating)
     {
@@ -102,14 +95,10 @@ public sealed partial class DocumentRenderer
                 }
             }
             if (shape.Text.Length == 0) return;
-            if (!_shapeLayouts.TryGetValue(shape.Id, out var cached) || !ReferenceEquals(cached.Source, shape))
-            {
-                if (_shapeLayouts.Count >= 128) _shapeLayouts.Clear();
-                cached = (shape, VisualTextLayout.Layout(shape, Metrics)); _shapeLayouts[shape.Id] = cached;
-            }
+            var shapeLines = VisualLayouts.GetShape(shape);
             canvas.Save(); canvas.ClipRect(SKRect.Create((float)shape.Padding, (float)shape.Padding, Math.Max(1, w - (float)shape.Padding * 2), Math.Max(1, h - (float)shape.Padding * 2)));
             paint.Style = SKPaintStyle.Fill; paint.Color = Color(shape.TextStyle.Color);
-            foreach (var line in cached.Lines) Metrics.Draw(canvas, line.Text, line.X, line.Baseline, shape.TextStyle, paint);
+            foreach (var line in shapeLines) Metrics.Draw(canvas, line.Text, line.X, line.Baseline, shape.TextStyle, paint);
             canvas.Restore();
         }
         finally { canvas.Restore(); }
