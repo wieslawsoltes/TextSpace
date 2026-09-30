@@ -10,6 +10,7 @@ public sealed partial class DocumentRenderer
     private readonly Dictionary<string, (ShapeBlock Source, IReadOnlyList<VisualTextLine> Lines)> _shapeLayouts = [];
 
     public void ClearVisualLayouts() { _equationLayouts.Clear(); _shapeLayouts.Clear(); }
+    public void InvalidateVisualLayout(string id) { _equationLayouts.Remove(id); _shapeLayouts.Remove(id); }
     public EquationLayout MeasureEquation(EquationNode root, double fontSize = 18) => new EquationLayouter(Metrics).Layout(root, fontSize);
     public EquationLayout MeasureEquation(EquationBlock equation)
     {

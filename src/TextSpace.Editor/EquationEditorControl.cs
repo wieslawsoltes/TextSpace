@@ -153,6 +153,15 @@ public sealed class EquationEditorControl : UserControl
     {
         CaptureInput(); _active = id; Rebuild(); FocusSlot(); _input.SelectAll();
     }
+    public IReadOnlyList<EquationSlotDiagnostic> CaptureSlotDiagnostics(UIElement relativeTo)
+    {
+        var transform = _canvas.TransformToVisual(relativeTo);
+        return _layout.Slots.Select(slot =>
+        {
+            var p = transform.TransformPoint(new Point((slot.Bounds.X + PaddingPoints) * DisplayScale, (slot.Bounds.Y + PaddingPoints) * DisplayScale));
+            return new EquationSlotDiagnostic(slot.Id, slot.Role, slot.Text, p.X, p.Y, slot.Bounds.Width * DisplayScale, slot.Bounds.Height * DisplayScale, slot.Id == _active);
+        }).ToArray();
+    }
     public void FocusSlot() => _input.Focus(FocusState.Programmatic);
     private void Paint(SKCanvas canvas)
     {

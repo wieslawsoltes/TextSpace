@@ -94,7 +94,7 @@ internal sealed class TableLayouter(ParagraphLayoutCache paragraphs, TextIndex i
                 case VisualBlock visual:
                     var bounds = VisualGeometry.Place(visual, width, maximumImageHeight, 0, result.Height);
                     result.Objects.Add(new(visual, bounds));
-                    if (visual is ImageBlock image) result.Images.Add(new(image, bounds));
+                    if (visual is ImageBlock visualImage) result.Images.Add(new(visualImage, bounds));
                     result.Height += bounds.Height + Math.Max(0, visual.Placement.Y) + 8; break;
             }
         }

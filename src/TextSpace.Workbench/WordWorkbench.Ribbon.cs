@@ -65,13 +65,13 @@ public sealed partial class WordWorkbench
         yield return Group("Pages", Tool("new", "Blank Page", "blank-page", true), Tool("pagebreak", "Page Break", "page-break", true));
         var tablePicker = new TablePicker(); tablePicker.TableSelected += (rows, columns) => RunEdit("Insert table", () => Session.InsertTable(rows, columns));
         var table = new RibbonButton("table", "Table", large: true, dropdown: true) { Flyout = tablePicker.AsFlyout() }; yield return Group("Tables", table);
-        yield return Group("Illustrations", Tool("image", "Pictures", "insert-picture", true), Unavailable("borders", "Shapes", "Drawing shapes and floating text boxes are not implemented in this release."));
+        yield return Group("Illustrations", Tool("image", "Pictures", "insert-picture", true), ShapeGallery());
         yield return Group("Links", Tool("link", "Link", "link", true));
         yield return Group("Comments", Tool("new-comment", "Comment", "new-comment", true));
         yield return Group("Header & Footer", Tool("header", "Header", "header", true), Tool("footer", "Footer", "footer", true), MenuButton("page-number", "Page Number", new OfficeMenu().Add("Page number", () => SetFooter("{PAGE}")).Add("Page X of Y", () => SetFooter("Page {PAGE} of {NUMPAGES}")).Add("Remove page numbers", () => SetFooter(""))));
         yield return Group("Text", Tool("date", "Date & Time", "date", true), Tool("borders", "Horizontal Line", "border-bottom", true));
         var symbols = new OfficeMenu(); foreach (var symbol in new[] { "©", "®", "™", "€", "£", "¥", "°", "±", "×", "÷", "Ω", "α", "β", "μ", "π", "∞", "→", "←", "✓", "§", "¶", "…", "—", "–", "½", "¼", "¾" }) { var selected = symbol; symbols.Add(symbol, () => RunEdit("Insert symbol", () => Session.InsertText(selected))); }
-        yield return Group("Symbols", MenuButton("symbol", "Symbol", symbols));
+        yield return Group("Symbols", Tool("symbol", "Equation", "insert-equation", true), MenuButton("symbol", "Symbol", symbols));
     }
     private IEnumerable<RibbonGroup> DesignRibbon()
     {

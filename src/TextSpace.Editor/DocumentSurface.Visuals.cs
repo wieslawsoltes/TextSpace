@@ -80,7 +80,7 @@ public sealed partial class DocumentSurface
         var point = e.GetCurrentPoint(_canvas); var position = point.Position;
         var right = point.Properties.IsRightButtonPressed;
         if (!right && !point.Properties.IsLeftButtonPressed && point.PointerDeviceType != PointerDeviceType.Touch) return false;
-        if (_objectEditor is not null) return false;
+        if (_objectEditor is not null) { e.Handled = true; return true; }
         if (!right && !Session.IsReadOnly && SelectedPlacement() is { } selected)
         {
             var p = PagePoint(position, selected.Page); var handle = HandleAt(selected.Item, p, (point.PointerDeviceType == PointerDeviceType.Touch ? 12 : 6) / Scale);
@@ -188,7 +188,7 @@ public sealed partial class DocumentSurface
     }
     private bool TryVisualKey(KeyRoutedEventArgs e)
     {
-        if (_objectEditor is not null) return false;
+        if (_objectEditor is not null) { e.Handled = true; return true; }
         if (e.Key == VirtualKey.Escape && (_visualGesture is not null || _tableGesture is not null))
         { CancelVisualGesture(); CancelTableGesture(); e.Handled = true; return true; }
         if (_selectedObjectId is null) return false;
@@ -221,7 +221,7 @@ public sealed partial class DocumentSurface
         var item = selected.Value.Item; var block = item.Object; var bounds = item.Bounds;
         if (_visualGesture is { } gesture)
         {
-            block = gesture.Draft.Value; bounds = gesture.Bounds; Renderer.ClearVisualLayouts(); Renderer.DrawVisualBlock(canvas, block, bounds);
+            block = gesture.Draft.Value; bounds = gesture.Bounds; Renderer.InvalidateVisualLayout(block.Id); Renderer.DrawVisualBlock(canvas, block, bounds);
             using var guide = new SKPaint { Color = SKColor.Parse("#D347B7"), StrokeWidth = (float)(1 / Scale), IsAntialias = true };
             if (gesture.GuideX is { } x) canvas.DrawLine((float)x, 0, (float)x, (float)Layout.Pages[page].Settings.Height, guide);
         }

@@ -6,11 +6,13 @@ namespace TextSpace.Workbench;
 public sealed partial class WordWorkbench
 {
     private OfficeComboField? _objectWidth, _objectHeight, _objectRotation, _objectX, _objectY;
+    private string? _visualContextId;
     private void InitializeVisualEditing()
     {
         Ribbon.AddTab("Shape Format", ShapeFormatRibbon, true); Ribbon.SetTabVisible("Shape Format", false);
         Ribbon.AddTab("Equation", EquationRibbon, true); Ribbon.SetTabVisible("Equation", false);
         Ribbon.InsertGroup("Picture Format", 0, ObjectTransformGroup);
+        Ribbon.InsertGroup("Picture Format", 1, () => Group("Crop", Tool("image", "Crop", "crop-picture", true), Tool("undo", "Reset Crop", "reset-crop", true)));
         Ribbon.InsertGroup("Table Layout", 0, () => Group("Selection",
             MenuButton("select", "Select", new OfficeMenu().Add("Select Cell", () => Surface.SelectTableCells("cell"))
                 .Add("Select Row", () => Surface.SelectTableCells("row")).Add("Select Column", () => Surface.SelectTableCells("column"))
@@ -105,6 +107,11 @@ public sealed partial class WordWorkbench
         var block = Surface.SelectedObject;
         Ribbon.SetTabVisible("Shape Format", block is ShapeBlock); Ribbon.SetTabVisible("Equation", block is EquationBlock);
         Ribbon.SetTabVisible("Picture Format", block is ImageBlock);
+        if (_visualContextId != block?.Id)
+        {
+            _visualContextId = block?.Id;
+            if (block is not null) Ribbon.SelectTab(block is ShapeBlock ? "Shape Format" : block is EquationBlock ? "Equation" : "Picture Format");
+        }
         if (_objectWidth is not null) _objectWidth.Value = (block?.Width ?? 0).ToString("0.##", CultureInfo.InvariantCulture);
         if (_objectHeight is not null) _objectHeight.Value = (block?.Height ?? 0).ToString("0.##", CultureInfo.InvariantCulture);
         if (_objectRotation is not null) _objectRotation.Value = (block?.Placement.Rotation ?? 0).ToString("0.#", CultureInfo.InvariantCulture);
