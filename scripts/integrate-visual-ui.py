@@ -16,7 +16,9 @@ replace('src/TextSpace.Editor/EquationEditorControl.cs', '    public void FocusS
         }).ToArray();
     }
     public void FocusSlot() => _input.Focus(FocusState.Programmatic);''')
-replace('src/TextSpace.Editor/DocumentSurface.Visuals.cs', '        if (_objectEditor is not null) return false;', '        if (_objectEditor is not null) { e.Handled = true; return true; }')
+# Both TryVisualPressed(PointerRoutedEventArgs e) and TryVisualKey(KeyRoutedEventArgs e)
+# must stop body editing while the detached object editor owns input.
+replace('src/TextSpace.Editor/DocumentSurface.Visuals.cs', '        if (_objectEditor is not null) return false;', '        if (_objectEditor is not null) { e.Handled = true; return true; }', count=2)
 replace('src/TextSpace.Editor/DocumentSurface.Visuals.cs', 'Renderer.ClearVisualLayouts(); Renderer.DrawVisualBlock', 'Renderer.InvalidateVisualLayout(block.Id); Renderer.DrawVisualBlock')
 replace('src/TextSpace.Skia/DocumentRenderer.Visuals.cs', '    public void ClearVisualLayouts() { _equationLayouts.Clear(); _shapeLayouts.Clear(); }', '    public void ClearVisualLayouts() { _equationLayouts.Clear(); _shapeLayouts.Clear(); }\n    public void InvalidateVisualLayout(string id) { _equationLayouts.Remove(id); _shapeLayouts.Remove(id); }')
 replace('src/TextSpace.Editor/DocumentSurface.cs', '        if (_disposed || DeferFocusUntilPopupsClose()) return;', '        if (_disposed || IsObjectEditorOpen || DeferFocusUntilPopupsClose()) return;')
