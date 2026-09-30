@@ -129,7 +129,17 @@ internal static partial class BrowserDiagnostics
                                 json.WriteString("kind", element is TextBox ? "textbox" : "button");
                                 json.WriteNumber("x", point.X); json.WriteNumber("y", point.Y);
                                 json.WriteNumber("width", element.ActualWidth); json.WriteNumber("height", element.ActualHeight);
-                                json.WriteBoolean("enabled", element is not Control control || control.IsEnabled); json.WriteEndObject();
+                                json.WriteBoolean("enabled", element is not Control control || control.IsEnabled);
+                                if (element is TextBox textBox)
+                                {
+                                    // The shared DOM input can still belong to the previous
+                                    // control. Expose the managed owner/value for observation;
+                                    // tests still acquire focus and edit through real input.
+                                    json.WriteBoolean("focused", textBox.FocusState != FocusState.Unfocused);
+                                    json.WriteBoolean("readOnly", textBox.IsReadOnly);
+                                    json.WriteString("value", textBox.Text);
+                                }
+                                json.WriteEndObject();
                             }
                         }
                         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Walk(VisualTreeHelper.GetChild(node, i));

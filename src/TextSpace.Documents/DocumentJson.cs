@@ -73,6 +73,7 @@ public static partial class DocumentJson
                         break;
                     case VisualBlock visual:
                         VisualBlockRules.Validate(visual);
+                        chars += visual.Name.Length;
                         if (depth > 0 && visual.Placement.Floating) throw new InvalidDataException("Floating placement is supported in the main story; objects inside table cells remain in flow.");
                         if (visual is ImageBlock image) images += image.Data.Length;
                         if (visual is ShapeBlock shape) chars += shape.Text.Length;

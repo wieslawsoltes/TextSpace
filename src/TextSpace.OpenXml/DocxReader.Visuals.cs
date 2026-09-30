@@ -122,6 +122,10 @@ public sealed partial class DocxReader
             }
         }
         if (result is null) return null;
+        var importedName = (string?)frame.Element(Wp + "docPr")?.Attribute("name");
+        result.Name = VisualNameRules.NormalizeImported(importedName);
+        if (importedName is not null && importedName != result.Name)
+            Warn("Drawing object names were normalized to single-line Unicode labels of at most 256 UTF-16 code units; retain the original for exact metadata.");
         var extent = frame.Element(Wp + "extent");
         result.Width = Number((string?)extent?.Attribute("cx"), 3048000) / 12700;
         result.Height = Number((string?)extent?.Attribute("cy"), 1524000) / 12700;

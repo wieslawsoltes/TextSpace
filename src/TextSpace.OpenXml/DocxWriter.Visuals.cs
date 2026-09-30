@@ -41,7 +41,7 @@ public sealed partial class DocxWriter
             var relationship = Relate("image", path); _media.Add((path, image.Data, image.ContentType));
             var crop = image.Crop;
             var picture = new XElement(Pic + "pic",
-                new XElement(Pic + "nvPicPr", new XElement(Pic + "cNvPr", new XAttribute("id", 0), new XAttribute("name", image.AltText)), new XElement(Pic + "cNvPicPr")),
+                new XElement(Pic + "nvPicPr", new XElement(Pic + "cNvPr", new XAttribute("id", 0), new XAttribute("name", image.Name.Length > 0 ? image.Name : "Picture " + id), new XAttribute("descr", image.AltText)), new XElement(Pic + "cNvPicPr")),
                 new XElement(Pic + "blipFill", new XElement(A + "blip", new XAttribute(R + "embed", relationship)),
                     new XElement(A + "srcRect", new XAttribute("l", (int)Math.Round(crop.Left * 100000)), new XAttribute("t", (int)Math.Round(crop.Top * 100000)),
                         new XAttribute("r", (int)Math.Round(crop.Right * 100000)), new XAttribute("b", (int)Math.Round(crop.Bottom * 100000))),
@@ -90,7 +90,7 @@ public sealed partial class DocxWriter
         }
         frame.Add(new XElement(Wp + "extent", new XAttribute("cx", cx), new XAttribute("cy", cy)));
         if (block.Placement.Floating) frame.Add(new XElement(Wp + "wrapNone"));
-        frame.Add(new XElement(Wp + "docPr", new XAttribute("id", id), new XAttribute("name", name), new XAttribute("descr", name)),
+        frame.Add(new XElement(Wp + "docPr", new XAttribute("id", id), new XAttribute("name", block.Name.Length > 0 ? block.Name : (block is ImageBlock ? "Picture" : name) + " " + id), new XAttribute("descr", name)),
             new XElement(Wp + "cNvGraphicFramePr"), new XElement(A + "graphic", graphicData));
         // Inline offsets map to the owning paragraph; negative vertical offsets
         // cannot be expressed as before-spacing and stay in the native extension.

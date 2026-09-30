@@ -71,7 +71,7 @@ public static partial class HtmlExporter
         var style = "width:" + N(w) + "pt;height:" + N(h) + "pt;overflow:hidden;display:flex;align-items:center;justify-content:center;break-inside:avoid;"
             + alignment + (placement.Floating ? "position:absolute;z-index:1;" : "position:relative;margin-bottom:8pt;")
             + "transform:translate(" + N(placement.X) + "pt," + N(placement.Y) + "pt) rotate(" + N(placement.Rotation) + "deg) scale(" + (placement.FlipHorizontal ? "-1" : "1") + "," + (placement.FlipVertical ? "-1" : "1") + ");";
-        return new XElement("div", new XAttribute("data-textspace-object", block is EquationBlock ? "equation" : block is ShapeBlock ? "shape" : "picture"), new XAttribute("style", style), content).ToString(SaveOptions.DisableFormatting);
+        return new XElement("div", new XAttribute("data-textspace-object", block is EquationBlock ? "equation" : block is ShapeBlock ? "shape" : "picture"), new XAttribute("data-textspace-name", block.Name), new XAttribute("style", style), content).ToString(SaveOptions.DisableFormatting);
     }
     private static XElement MathContent(EquationNode node)
     {
