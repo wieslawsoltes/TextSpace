@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { chromium } from '@playwright/test';
+import { visiblePaperPoint } from './visible-paper-point.mjs';
 
 const base = (process.env.TEXTSPACE_BASE_URL || 'http://127.0.0.1:4173/TextSpace/').replace(/\/?$/, '/');
 const output = 'test-results/continuous-sections';
@@ -32,18 +33,15 @@ async function ready(value = null, tag = 'TEXTAREA') {
   }, { value, tag }), 'Native input not ready: ' + tag);
 }
 async function focusPaper() {
-  // Startup data is observable before the workbench is attached and arranged.
-  // Wait for the actual viewport before obtaining coordinates for real input.
+  // Data is observable before arrangement, and earlier tests may scroll the
+  // first paragraph offscreen. Click only a currently visible paper location.
   await page.bringToFront();
+  let target;
   await until(async () => {
-    const s = await state(); const c = s?.canvas;
-    return c && c.width > 300 && c.height > 200 && Number.isFinite(c.paperLeft) && c.scale > 0;
-  }, 'Recovered paper viewport was not arranged');
-  const s = await state(); const c = s.canvas;
-  const x = c.x + c.paperLeft + 75 * c.scale;
-  const y = c.y + 18 + 75 * c.scale - c.scrollY;
-  assert.ok(x > c.x && x < c.x + c.width && y > c.y && y < c.y + c.height, 'Paper focus point is outside the visible canvas');
-  await page.mouse.click(x, y);
+    target = visiblePaperPoint(await state(), page.viewportSize());
+    return target !== null;
+  }, 'No arranged paper is visible for pointer focus');
+  await page.mouse.click(target.x, target.y);
 }
 async function fill(name, value) { await click(name); await ready(null, 'INPUT'); await page.keyboard.press('Control+a'); await page.keyboard.insertText(value); await ready(value, 'INPUT'); }
 async function blank() {
