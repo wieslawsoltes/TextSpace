@@ -21,9 +21,18 @@ public sealed partial class DocumentRenderer : IDisposable
     private readonly Dictionary<string, SKBitmap> _images = [];
     public SkiaTextMetrics Metrics { get; } = new();
     private PageLayoutEngine? _layoutEngine;
+    private string? _layoutDocumentId;
     public DocumentLayout Layout(DocumentModel document)
     {
-        ClearVisualLayouts();
+        ArgumentNullException.ThrowIfNull(document);
+        // Visual typography is keyed by content, slot identities and metric
+        // revision, not page placement. Repagination, body edits and undo snapshots
+        // of the same document must not evict every unchanged shape/equation.
+        if (!StringComparer.Ordinal.Equals(_layoutDocumentId, document.Id))
+        {
+            ClearVisualLayouts();
+            _layoutDocumentId = document.Id;
+        }
         return (_layoutEngine ??= new PageLayoutEngine(Metrics)).Layout(document);
     }
     public static SKColor Color(string? text, string fallback = "#202020") => SKColor.TryParse(text ?? fallback, out var color) ? color : SKColor.Parse(fallback);
@@ -169,5 +178,5 @@ public sealed partial class DocumentRenderer : IDisposable
         surface.Canvas.Scale((float)scale); DrawPage(surface.Canvas, document, layout, pageIndex, new() { ShowComments = false, ShowChanges = false });
         using var image = surface.Snapshot(); using var data = image.Encode(SKEncodedImageFormat.Png, 100); return data.ToArray();
     }
-    public void Dispose() { ClearImages(); _layoutEngine?.ParagraphCache.Clear(); Metrics.Dispose(); }
+    public void Dispose() { ClearImages(); ClearVisualLayouts(); _layoutEngine?.ParagraphCache.Clear(); Metrics.Dispose(); }
 }
