@@ -32,7 +32,7 @@ async function control(name) {
 }
 async function click(name) { const c = await control(name); await page.mouse.click(c.x + c.width / 2, c.y + c.height / 2); await page.waitForTimeout(200); }
 async function nativeReady(readOnly = false) {
-  await until(() => page.evaluate(readOnly => document.hasFocus() && document.activeElement?.id === 'uno-input' && document.activeElement.readOnly === readOnly, readOnly), 'Native input not focused');
+  await until(() => page.evaluate(readOnly => document.hasFocus() && document.activeElement?.id === 'uno-input' && (readOnly === null || document.activeElement.readOnly === readOnly), readOnly), 'Native input not focused');
 }
 async function fill(name, text) { await click(name); await nativeReady(); await page.keyboard.press('Control+a'); await page.keyboard.insertText(text); }
 async function blank() {
@@ -47,7 +47,16 @@ async function selectObject(id) {
   const item = await object(id); assert.ok(item, 'Object not present');
   await page.mouse.click(item.x + item.width / 2, item.y + item.height / 2);
   await until(async () => (await state()).visuals.selected === id, 'Object was not selected');
-  await nativeReady(true);
+  // Observe native focus separately from managed TextBox state, then exercise
+  // actual input to prove that object selection cannot mutate body text.
+  await nativeReady(null);
+  await until(async () => (await state()).visuals.bodyReadOnly, 'Managed body input must be read-only for object selection');
+  const before = await state();
+  await page.keyboard.insertText('BODY INPUT MUST BE REJECTED');
+  await page.waitForTimeout(200);
+  assert.equal((await state()).text, before.text, 'Object-mode typing changed body text');
+  assert.equal((await state()).revision, before.revision, 'Rejected typing changed document history');
+  await until(() => page.evaluate(text => document.activeElement?.value === text, before.text), 'Rejected input was not restored in the native textarea');
 }
 async function drag(from, to) {
   await page.mouse.move(from.x, from.y); await page.mouse.down();
@@ -149,6 +158,24 @@ try {
   await check('equation structure cancellation leaves the original tree', async () => {
     await click('edit-object'); await click('Equation Radical'); await page.keyboard.press('Escape');
     await until(async () => !(await state()).visuals.editor, 'Equation editor did not cancel');
+    assert.equal((await object(equationId)).text, '(a+b)/(c)');
+  });
+  await check('matrix row and column edits have independent local history', async () => {
+    const revision = (await state()).revision;
+    await click('edit-object'); await click('Equation Matrix');
+    await until(async () => (await state()).visuals.slots.length === 5, 'Matrix template was not inserted into the active fraction slot');
+    await click('Matrix layout'); await click('Insert Matrix Column Right');
+    await until(async () => (await state()).visuals.slots.length === 7, 'Matrix column insertion failed');
+    await click('Equation Undo'); await until(async () => (await state()).visuals.slots.length === 5, 'Local matrix undo failed');
+    await click('Equation Redo'); await until(async () => (await state()).visuals.slots.length === 7, 'Local matrix redo failed');
+    await click('Matrix layout'); await click('Insert Matrix Row Below');
+    await until(async () => (await state()).visuals.slots.length === 10, 'Matrix row insertion failed');
+    await page.screenshot({ path: output + '/matrix-editor.png' });
+    await click('Equation structure operations'); await click('Convert Structure to Linear Text');
+    await until(async () => (await state()).visuals.slots.length === 2, 'Linear conversion lost surrounding fraction slots');
+    await click('Equation Undo'); await until(async () => (await state()).visuals.slots.length === 10, 'Linear conversion undo failed');
+    assert.equal((await state()).revision, revision, 'Local equation edits changed document history before Apply');
+    await click('Cancel equation'); await until(async () => !(await state()).visuals.editor, 'Matrix draft did not cancel');
     assert.equal((await object(equationId)).text, '(a+b)/(c)');
   });
   await check('picture crop is nondestructive and resettable', async () => {

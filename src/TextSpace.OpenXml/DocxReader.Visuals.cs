@@ -134,6 +134,12 @@ public sealed partial class DocxReader
         var y = floating ? Number(frame.Element(Wp + "positionV")?.Element(Wp + "posOffset")?.Value) / 12700
             : Number((string?)paragraphProperties?.Element(W + "spacing")?.Attribute(W + "before")) / 20;
         if (floating) result.Alignment = TextAlignment.Left;
+        var supportedCoordinateFrame = !floating ||
+            (string?)frame.Element(Wp + "positionH")?.Attribute("relativeFrom") == "column"
+            && (string?)frame.Element(Wp + "positionV")?.Attribute("relativeFrom") == "paragraph"
+            && frame.Element(Wp + "positionH")?.Element(Wp + "align") is null
+            && frame.Element(Wp + "positionV")?.Element(Wp + "align") is null;
+        if (!supportedCoordinateFrame) Warn("Unsupported drawing coordinate frame was normalized to local column/paragraph offsets; retain the original for exact placement.");
         var native = properties?.Element(A + "extLst")?.Elements(A + "ext").FirstOrDefault(e => (string?)e.Attribute("uri") == PlacementExtension)?.Element(Ts + "placement");
         if (native is not null && Enum.TryParse<TextAlignment>((string?)native.Attribute("alignment"), out var alignment) && Enum.IsDefined(alignment))
         {
@@ -143,7 +149,11 @@ public sealed partial class DocxReader
             // export snapshot. Editing the standard frame in Word takes precedence.
             var standardX = Number((string?)native.Attribute("standardX"), double.NaN);
             var standardY = Number((string?)native.Attribute("standardY"), double.NaN);
-            if ((floating || result.Alignment == alignment) && double.IsFinite(nativeX + nativeY + standardX + standardY) && Math.Abs(x - standardX) < 0.051 && Math.Abs(y - standardY) < 0.051)
+            var standardWidth = Number((string?)native.Attribute("standardWidth"), double.NaN);
+            var standardHeight = Number((string?)native.Attribute("standardHeight"), double.NaN);
+            var sameGeometry = supportedCoordinateFrame && (string?)native.Attribute("standardFloating") == (floating ? "1" : "0")
+                && Math.Abs(result.Width - standardWidth) < 0.001 && Math.Abs(result.Height - standardHeight) < 0.001;
+            if (sameGeometry && (floating || result.Alignment == alignment) && double.IsFinite(nativeX + nativeY + standardX + standardY) && Math.Abs(x - standardX) < 0.051 && Math.Abs(y - standardY) < 0.051)
             { result.Alignment = alignment; x = nativeX; y = nativeY; }
             if (result is ShapeBlock rectangle && rectangle.Kind == ShapeKind.Rectangle && (string?)native.Attribute("kind") == "TextBox") rectangle.Kind = ShapeKind.TextBox;
         }

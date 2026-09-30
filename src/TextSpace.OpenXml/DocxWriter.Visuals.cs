@@ -27,6 +27,8 @@ public sealed partial class DocxWriter
         // preserves that distinction; standard DrawingML remains fully editable.
         var placement = new XElement(A + "extLst", new XElement(A + "ext", new XAttribute("uri", PlacementExtension),
             new XElement(Ts + "placement", new XAttribute("x", Invariant(block.Placement.X)), new XAttribute("y", Invariant(block.Placement.Y)),
+                new XAttribute("standardWidth", Invariant(block.Width)), new XAttribute("standardHeight", Invariant(block.Height)),
+                new XAttribute("standardFloating", block.Placement.Floating ? "1" : "0"),
                 new XAttribute("standardX", Invariant(block.Placement.Floating ? AlignedLeft(block) + block.Placement.X : Twips(block.Placement.X) / 20d)),
                 new XAttribute("standardY", Invariant(block.Placement.Floating ? block.Placement.Y : Twips(Math.Max(0, block.Placement.Y)) / 20d)),
                 new XAttribute("alignment", block.Alignment), new XAttribute("kind", block is ShapeBlock s ? s.Kind.ToString() : block is EquationBlock ? "Equation" : "Picture"))));

@@ -77,7 +77,7 @@ public static class EquationRules
                 || !Enum.IsDefined(node.Kind) || node.Text is null || node.Children is null)
                 throw new InvalidDataException("Invalid equation node.");
             characters += node.Text.Length;
-            if (characters > MaximumCharacters || node.Text.Any(c => char.IsControl(c)) || !WellFormed(node.Text))
+            if (characters > MaximumCharacters || !VisualTextRules.IsValid(node.Text, MaximumCharacters, false))
                 throw new InvalidDataException("Equation text is oversized or contains invalid characters.");
             var count = node.Children.Count;
             var valid = node.Kind switch

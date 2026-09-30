@@ -9,6 +9,7 @@ internal static partial class BrowserDiagnostics
     {
         var state = workbench.Surface.CaptureVisualDiagnostics(workbench);
         json.WriteStartObject("visuals"); json.WriteString("selected", state.SelectedObjectId);
+        json.WriteBoolean("bodyReadOnly", workbench.Surface.IsBodyInputReadOnly);
         json.WriteBoolean("cropping", state.Cropping); json.WriteBoolean("gesture", state.GestureActive); json.WriteBoolean("editor", state.EditorOpen);
         json.WriteStartArray("objects");
         foreach (var item in state.Objects)

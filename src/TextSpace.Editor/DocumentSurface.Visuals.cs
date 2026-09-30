@@ -23,6 +23,7 @@ public sealed partial class DocumentSurface
     private bool _cropMode;
     private string? _selectedObjectId;
     public string? SelectedObjectId => _selectedObjectId;
+    public bool IsBodyInputReadOnly => _input.IsReadOnly;
     public VisualBlock? SelectedObject => Session.FindVisual(_selectedObjectId);
     public bool IsCropping => _cropMode && SelectedObject is ImageBlock;
     public bool IsVisualGestureActive => _visualGesture is not null || _tableGesture is not null;
