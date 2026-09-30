@@ -11,13 +11,32 @@ public sealed record EquationRule(IReadOnlyList<EquationPoint> Points, double Th
 public sealed record EquationLayout(double Width, double Height, double Ascent,
     IReadOnlyList<EquationGlyph> Glyphs, IReadOnlyList<EquationRule> Rules, IReadOnlyList<EquationSlot> Slots)
 {
-    public EquationSlot? HitTest(double x, double y) => Slots.OrderBy(s => Distance(s.Bounds, x, y)).FirstOrDefault();
+    public EquationSlot? HitTest(double x, double y)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y)) return null;
+        EquationSlot? best = null; var distance = double.PositiveInfinity;
+        for (var i = 0; i < Slots.Count; i++)
+        {
+            var candidate = Slots[i]; var next = Distance(candidate.Bounds, x, y);
+            if (best is null || next < distance) { best = candidate; distance = next; }
+        }
+        return best;
+    }
     public EquationSlot? VerticalNeighbor(string id, bool down)
     {
-        var source = Slots.FirstOrDefault(s => s.Id == id); if (source is null) return null;
+        EquationSlot? source = null;
+        for (var i = 0; i < Slots.Count; i++) if (Slots[i].Id == id) { source = Slots[i]; break; }
+        if (source is null) return null;
         var x = source.Bounds.X + source.Bounds.Width / 2; var y = source.Bounds.Y + source.Bounds.Height / 2;
-        return Slots.Where(s => s.Id != id && (down ? s.Bounds.Y + s.Bounds.Height / 2 > y + 1 : s.Bounds.Y + s.Bounds.Height / 2 < y - 1))
-            .OrderBy(s => Math.Abs(s.Bounds.Y + s.Bounds.Height / 2 - y) + Math.Abs(s.Bounds.X + s.Bounds.Width / 2 - x) * 2).FirstOrDefault();
+        EquationSlot? best = null; var distance = double.PositiveInfinity;
+        for (var i = 0; i < Slots.Count; i++)
+        {
+            var candidate = Slots[i]; var centerY = candidate.Bounds.Y + candidate.Bounds.Height / 2;
+            if (candidate.Id == id || (down ? centerY <= y + 1 : centerY >= y - 1)) continue;
+            var next = Math.Abs(centerY - y) + Math.Abs(candidate.Bounds.X + candidate.Bounds.Width / 2 - x) * 2;
+            if (next < distance) { best = candidate; distance = next; }
+        }
+        return best;
     }
     private static double Distance(RectD r, double x, double y)
     {
