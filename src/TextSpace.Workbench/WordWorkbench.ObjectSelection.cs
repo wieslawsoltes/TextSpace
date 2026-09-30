@@ -49,6 +49,7 @@ public sealed partial class WordWorkbench
         pane.Body.Children.Add(Wrapped("Select objects even when they overlap. Tab / Shift+Tab cycles objects on the paper; Enter edits shape text or an equation.", 11, OfficeTheme.Muted));
         pane.Body.Children.Add(OfficeTheme.Row(new OfficeButton("Previous object", () => Surface.SelectNextObject(true)), new OfficeButton("Next object", () => Surface.SelectNextObject())));
         pane.Body.Children.Add(OfficeTheme.Row(_objectListEdit, new OfficeButton("Clear selection", () => { Surface.SelectObject(null); Surface.FocusEditor(); })));
+        AddObjectNameEditor(pane);
         pane.Body.Children.Add(_objectSelectionStatus);
         pane.Body.Children.Add(OfficeTheme.Row(_objectListPrevious, _objectListNext));
         pane.Body.Children.Add(_objectSelectionRows);
@@ -70,12 +71,12 @@ public sealed partial class WordWorkbench
                 var block = location.Item.Object;
                 var kind = block is ShapeBlock shape ? shape.Kind.ToString() : block is EquationBlock ? "Equation" : "Picture";
                 var text = block switch { ShapeBlock s => s.Text, EquationBlock e => e.Root.ToLinearText(), ImageBlock image => image.AltText, _ => "" };
-                var fullLabel = kind + " · Page " + (location.PageIndex + 1) + (text.Length == 0 ? "" : " · " + text);
+                var fullLabel = block.Name + " " + kind + " · Page " + (location.PageIndex + 1) + (text.Length == 0 ? "" : " · " + text);
                 if (_objectFilter.Length > 0 && !fullLabel.Contains(_objectFilter, StringComparison.OrdinalIgnoreCase) && !block.Id.Contains(_objectFilter, StringComparison.OrdinalIgnoreCase)) continue;
                 var length = Math.Min(80, text.Length);
                 if (length < text.Length && length > 0 && char.IsHighSurrogate(text[length - 1])) length--;
                 var excerpt = text[..length].Replace('\r', ' ').Replace('\n', ' ');
-                _objectMatches.Add((block.Id, kind + " · Page " + (location.PageIndex + 1) + (excerpt.Length == 0 ? "" : "\n" + excerpt)));
+                _objectMatches.Add((block.Id, (block.Name.Length == 0 ? "" : block.Name + "\n") + kind + " · Page " + (location.PageIndex + 1) + (excerpt.Length == 0 ? "" : "\n" + excerpt)));
             }
             RenderObjectSelectionPage();
         }
@@ -102,6 +103,7 @@ public sealed partial class WordWorkbench
     }
     private void RefreshObjectSelectionHighlight()
     {
+        RefreshObjectNameEditor();
         foreach (var pair in _objectSelectionButtons)
         {
             pair.Value.IsSelected = pair.Key == Surface.SelectedObjectId;

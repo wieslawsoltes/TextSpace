@@ -5,6 +5,7 @@ public static class VisualBlockRules
     public static void Validate(VisualBlock block)
     {
         ArgumentNullException.ThrowIfNull(block);
+        if (!VisualNameRules.IsValid(block.Name)) throw new InvalidDataException("Invalid visual object name.");
         if (!double.IsFinite(block.Width + block.Height) || block.Width is <= 0 or > 4000 || block.Height is <= 0 or > 4000
             || !Enum.IsDefined(block.Alignment) || block.Placement is not { } p
             || !double.IsFinite(p.X + p.Y + p.Rotation) || Math.Abs(p.X) > 4000 || Math.Abs(p.Y) > 4000 || Math.Abs(p.Rotation) > 36000)

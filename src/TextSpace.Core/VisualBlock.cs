@@ -3,6 +3,8 @@ namespace TextSpace.Core;
 /// <summary>An independently selectable visual object, anchored at its position in block flow.</summary>
 public abstract class VisualBlock : Block
 {
+    /// <summary>Optional user label, independent of content and alternative text.</summary>
+    public string Name { get; set; } = "";
     public double Width { get; set; } = 240;
     public double Height { get; set; } = 120;
     public TextAlignment Alignment { get; set; } = TextAlignment.Center;

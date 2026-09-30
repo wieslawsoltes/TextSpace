@@ -40,6 +40,7 @@ public static class BlockTree
             _ => throw new ArgumentException("Unsupported visual object.", nameof(source))
         };
         clone.Id = newIds ? Guid.NewGuid().ToString("N") : source.Id;
+        clone.Name = source.Name;
         clone.Width = source.Width; clone.Height = source.Height; clone.Alignment = source.Alignment; clone.Placement = source.Placement;
         return clone;
     }
