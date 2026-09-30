@@ -89,6 +89,12 @@ public sealed partial class DocxReader
         {
             if (element.Name == W + "p")
             {
+                if (HasVisualContent(element))
+                {
+                    foreach (var visualBlock in ReadVisualParagraph(element)) yield return visualBlock;
+                }
+                else
+                {
                 var hasPageBreak = element.Descendants(W + "br").Any(b => (string?)b.Attribute(W + "type") == "page");
                 var hasColumnBreak = element.Descendants(W + "br").Any(b => (string?)b.Attribute(W + "type") == "column");
                 var hasText = element.Descendants(W + "t").Any() || element.Descendants(W + "fldChar").Any() || element.Descendants(W + "fldSimple").Any();
@@ -101,6 +107,7 @@ public sealed partial class DocxReader
                     foreach (var drawing in pictures) if (ReadPicture(drawing) is { } image) yield return image;
                     if (hasPageBreak) { yield return new PageBreakBlock(); Warn("Inline page breaks are normalized to block page breaks."); }
                     if (hasColumnBreak) { yield return new ColumnBreakBlock(); Warn("Inline column breaks are normalized to block column breaks."); }
+                }
                 }
                 if (parent.Name == W + "body" && element.Element(W + "pPr")?.Element(W + "sectPr") is not null)
                 {
@@ -184,7 +191,6 @@ public sealed partial class DocxReader
         var extension = Path.GetExtension(relation.Target).ToLowerInvariant(); var type = extension is ".jpg" or ".jpeg" ? "image/jpeg" : extension == ".png" ? "image/png" : extension == ".gif" ? "image/gif" : null;
         if (type is null) { Warn("Only PNG, JPEG and GIF pictures are imported."); return null; }
         using var stream = entry.Open(); using var bytes = new MemoryStream(); stream.CopyTo(bytes); var extent = drawing.Element(Wp + "extent");
-        if (drawing.Name == Wp + "anchor") Warn("Floating pictures are imported as in-flow picture blocks.");
         return new() { Data = bytes.ToArray(), ContentType = type, Width = Math.Clamp(Number((string?)extent?.Attribute("cx"), 4572000) / 12700, 1, 4000), Height = Math.Clamp(Number((string?)extent?.Attribute("cy"), 3048000) / 12700, 1, 4000), AltText = (string?)drawing.Element(Wp + "docPr")?.Attribute("descr") ?? "Picture" };
     }
     private void LoadComments(DocumentModel document)

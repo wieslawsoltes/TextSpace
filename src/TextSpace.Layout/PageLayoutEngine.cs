@@ -139,11 +139,15 @@ public sealed class PageLayoutEngine(ITextMetrics metrics)
                     BreakMarker("Section Break (" + boundary.Kind + ")");
                     flow.Switch(boundary); number = 0;
                     break;
-                case ImageBlock image:
-                    var ratio = Math.Min(1, Math.Min(flow.Settings.ColumnWidth / image.Width, flow.Settings.ContentHeight / image.Height));
-                    var width = image.Width * ratio; var height = image.Height * ratio; flow.Ensure(height);
-                    var x = flow.Left + (image.Alignment == TextAlignment.Center ? (flow.Settings.ColumnWidth - width) / 2 : image.Alignment == TextAlignment.Right ? flow.Settings.ColumnWidth - width : 0);
-                    flow.Page.Images.Add(new(image, new(x, flow.Y, width, height))); flow.Y += height + 8; break;
+                case VisualBlock visual:
+                    var ratio = Math.Min(1, Math.Min(flow.Settings.ColumnWidth / visual.Width, flow.Settings.ContentHeight / visual.Height));
+                    var height = visual.Height * ratio + Math.Max(0, visual.Placement.Y);
+                    if (!visual.Placement.Floating) flow.Ensure(height);
+                    var bounds = VisualGeometry.Place(visual, flow.Settings.ColumnWidth, flow.Settings.ContentHeight, flow.Left, flow.Y);
+                    flow.Page.Objects.Add(new(visual, bounds));
+                    if (visual is ImageBlock image) flow.Page.Images.Add(new(image, bounds));
+                    if (!visual.Placement.Floating) flow.Y += height + 8;
+                    break;
             }
         }
         return flow.Finish(document);

@@ -102,6 +102,7 @@ internal static partial class BrowserDiagnostics
                     json.WriteEndObject();
                     WriteTypography(json, session, surface);
                     WriteTables(json, session, surface);
+                    WriteVisuals(json, workbench);
                     json.WriteBoolean("canUndo", session.CanUndo); json.WriteBoolean("canRedo", session.CanRedo);
                     json.WriteNumber("revision", session.Revision); json.WriteNumber("zoom", surface.Zoom);
                     json.WriteString("selectedTab", workbench.Ribbon.SelectedTab); json.WriteString("status", workbench.StatusText);

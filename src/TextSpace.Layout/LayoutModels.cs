@@ -85,11 +85,21 @@ public sealed class LayoutLine
 
 public sealed record LayoutCell(string TableId, RectD Bounds, string? Fill, bool Header)
 {
+    public int Row { get; init; }
+    public int Column { get; init; }
+    public int RowSpan { get; init; } = 1;
+    public int ColumnSpan { get; init; } = 1;
+    public double TableWidth { get; init; }
+    public double TableLeft { get; init; }
+    public double LogicalHeight { get; init; }
     public bool DrawTop { get; init; } = true;
     public bool DrawBottom { get; init; } = true;
     public bool IsReplica { get; init; }
 }
-public sealed record LayoutImage(ImageBlock Image, RectD Bounds);
+public sealed record LayoutImage(ImageBlock Image, RectD Bounds)
+{
+    public bool IsReplica { get; init; }
+}
 
 public sealed record LayoutBreakMarker(string Label, double X, double Y, double Width);
 
@@ -111,6 +121,7 @@ public sealed class LayoutPage(int index, PageSettings settings)
     public List<LayoutLine> Lines { get; } = [];
     public List<LayoutCell> Cells { get; } = [];
     public List<LayoutImage> Images { get; } = [];
+    public List<LayoutObject> Objects { get; } = [];
     public List<LayoutBreakMarker> Breaks { get; } = [];
 }
 

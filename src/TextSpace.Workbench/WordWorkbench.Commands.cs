@@ -23,6 +23,7 @@ public sealed partial class WordWorkbench
     {
         try
         {
+            if (ExecuteVisualCommand(id)) return;
             switch (id)
             {
                 case "tab-stops": await TabStopsAsync(); break;

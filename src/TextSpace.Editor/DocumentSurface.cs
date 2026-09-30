@@ -66,7 +66,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         _input.TextChanged += OnNativeTextChanged; _input.SelectionChanged += OnNativeSelectionChanged; _input.PreviewKeyDown += OnInputKeyDown; _input.PreviewKeyUp += OnInputKeyUp;
         _input.BeforeTextChanging += (_, e) =>
         {
-            if (_ownsNativeInput && !_syncing) e.Cancel = true;
+            if ((_ownsNativeInput || _selectedObjectId is not null) && !_syncing) e.Cancel = true;
         };
         _input.GotFocus += (_, _) => { _caretVisible = true; _caretTimer.Start(); Invalidate(); }; _input.LostFocus += (_, _) => { _caretVisible = false; _caretTimer.Stop(); Invalidate(); };
         _viewport.Children.Add(_canvas); _viewport.Children.Add(_input);
@@ -75,9 +75,9 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
         Content = OfficeTheme.Rows((_ruler, 0), (paper, -1), (bottom, 16)); Background = OfficeTheme.Brush("#E8E8E8");
         _canvas.Draw = Draw; _canvas.SizeChanged += (_, _) => { ClampScroll(); UpdateRuler(); UpdateInputPosition(); Invalidate(); ViewChanged?.Invoke(); };
         _canvas.PointerPressed += OnPointerPressed; _canvas.PointerMoved += OnPointerMoved;
-        _canvas.PointerReleased += (_, e) => { _dragging = false; _canvas.ReleasePointerCaptures(); e.Handled = true; };
-        _canvas.PointerCaptureLost += (_, _) => _dragging = false;
-        _canvas.DoubleTapped += (_, e) => { Try(() => Session.SelectWord(HitTest(e.GetPosition(_canvas)))); FocusEditor(); e.Handled = true; };
+        _canvas.PointerReleased += (_, e) => { _dragging = false; if (!CompleteVisualGesture()) CompleteTableGesture(); _canvas.ReleasePointerCaptures(); e.Handled = true; };
+        _canvas.PointerCaptureLost += (_, _) => { _dragging = false; CancelVisualGesture(); CancelTableGesture(); };
+        _canvas.DoubleTapped += (_, e) => { if (!TryVisualDoubleTap(e.GetPosition(_canvas))) { Try(() => Session.SelectWord(HitTest(e.GetPosition(_canvas)))); FocusEditor(); } e.Handled = true; };
         _canvas.PointerWheelChanged += (_, e) =>
         {
             var point = e.GetCurrentPoint(_canvas); var delta = point.Properties.MouseWheelDelta;
@@ -97,9 +97,9 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     public static bool ControlDown() => KeyDown(VirtualKey.Control) || KeyDown(VirtualKey.LeftWindows) || KeyDown(VirtualKey.RightWindows);
     public void FocusEditor()
     {
-        if (_disposed || DeferFocusUntilPopupsClose()) return;
+        if (_disposed || IsObjectEditorOpen || DeferFocusUntilPopupsClose()) return;
         if (_input.FocusState != FocusState.Unfocused) CommitNativeInput();
-        _input.IsReadOnly = Session.IsReadOnly;
+        _input.IsReadOnly = Session.IsReadOnly || _selectedObjectId is not null;
         SyncInput();
         _input.Focus(FocusState.Programmatic);
         _caretVisible = true;
@@ -116,13 +116,14 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     {
         if (_disposed) return;
         if (_nativeEdit) { QueueNativeViewRefresh(); return; }
+        RefreshVisualState(e);
         if (e.Kind == EditorChangeKind.Document)
         {
             if (_documentId != Session.Document.Id || e.Label == "Open document") { _documentId = Session.Document.Id; Renderer.ClearImages(); _scrollX = _scrollY = 0; SelectedImageId = null; }
             Relayout();
         }
         if (!_nativeEdit) SyncInput();
-        if (e.Kind is EditorChangeKind.Document or EditorChangeKind.Selection) { _caretVisible = true; EnsureCaretVisible(); UpdateRuler(); }
+        if (e.Kind is EditorChangeKind.Document or EditorChangeKind.Selection) { _caretVisible = true; if (_selectedObjectId is null && _tableGesture is null) EnsureCaretVisible(); UpdateRuler(); }
         Invalidate();
     }
     private void SyncInput()
@@ -133,14 +134,14 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
             var text = _inputText.Text; if (_input.Text != text) _input.Text = text;
             var selection = Session.Selection;
             _input.Select(selection.Start, selection.Length);
-            _input.IsReadOnly = Session.IsReadOnly; UpdateInputPosition();
+            _input.IsReadOnly = Session.IsReadOnly || _selectedObjectId is not null; UpdateInputPosition();
         }
         finally { _syncing = false; }
     }
     private void OnNativeTextChanged(object sender, TextChangedEventArgs e) => CommitNativeInput();
     private void CommitNativeInput()
     {
-        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed || _selectedObjectId is not null) return;
         var oldText = _inputText.Text; var newText = _input.Text.Replace("\r\n", "\n").Replace('\r', '\n'); if (oldText == newText) return;
         var prefix = 0; while (prefix < oldText.Length && prefix < newText.Length && oldText[prefix] == newText[prefix]) prefix++;
         var suffix = 0; while (suffix < oldText.Length - prefix && suffix < newText.Length - prefix && oldText[oldText.Length - 1 - suffix] == newText[newText.Length - 1 - suffix]) suffix++;
@@ -151,7 +152,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     private void OnNativeSelectionChanged(object sender, RoutedEventArgs e)
     {
-        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed || _input.Text != _inputText.Text) return;
+        if (_syncing || _nativeEdit || _ownsNativeInput || _disposed || _selectedObjectId is not null || _input.Text != _inputText.Text) return;
         var start = _input.SelectionStart; var end = start + _input.SelectionLength;
         if (Session.Selection.Start == start && Session.Selection.End == end) return;
         Session.SetSelection(start, end);
@@ -159,17 +160,17 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private int HitTest(Point point) => Layout.HitTest((point.X - PaperLeft) / Scale, (point.Y - 18 + _scrollY) / Scale);
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (TryVisualPressed(e) || TryTablePressed(e)) return;
         var point = e.GetCurrentPoint(_canvas); _lastPointer = point.Position;
         if (point.Properties.IsRightButtonPressed) { if (Session.Selection.IsEmpty) { var at = HitTest(point.Position); Session.SetSelection(at, at); } ContextRequested?.Invoke(point.Position); e.Handled = true; return; }
         if (!point.Properties.IsLeftButtonPressed && point.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch) return;
-        SelectedImageId = null; var documentY = (point.Position.Y - 18 + _scrollY) / Scale; var pageIndex = Layout.PageAtY(documentY); var paperX = (point.Position.X - PaperLeft) / Scale - Layout.PageLeft(pageIndex); var paperY = documentY - Layout.PageTop(pageIndex);
-        var image = Layout.Pages[pageIndex].Images.LastOrDefault(i => i.Bounds.Contains(paperX, paperY));
-        if (image is not null) { SelectedImageId = image.Image.Id; Invalidate(); ViewChanged?.Invoke(); CommandRequested?.Invoke("picture-selected"); e.Handled = true; return; }
+        SelectObject(null); ClearCellSelection();
         var position = HitTest(point.Position); _anchor = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift) ? Session.Selection.Anchor : position;
         Try(() => Session.SetSelection(_anchor, position)); _dragging = true; _canvas.CapturePointer(e.Pointer); FocusEditor(); _desiredX = null; e.Handled = true;
     }
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        if (TryVisualMoved(e) || TryTableMoved(e)) return;
         _lastPointer = e.GetCurrentPoint(_canvas).Position; if (!_dragging) return;
         if (_lastPointer.Y < 0) SetScroll(_scrollX, _scrollY - 18); else if (_lastPointer.Y > _canvas.ActualHeight) SetScroll(_scrollX, _scrollY + 18);
         Try(() => Session.SetSelection(_anchor, HitTest(_lastPointer))); e.Handled = true;
@@ -185,7 +186,8 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
             var top = 18 + Layout.PageTop(i) * Scale - _scrollY; if (top > area.Height || top + pageHeight < 0) continue;
             canvas.DrawRect((float)left + 2, (float)top + 3, (float)pageWidth, (float)pageHeight, shadow);
             canvas.Save(); canvas.Translate((float)left, (float)top); canvas.Scale((float)Scale);
-            Renderer.DrawPage(canvas, Session.Document, Layout, i, new() { Selection = Session.Selection, DrawCaret = _caretVisible && !Session.IsReadOnly && SelectedImageId is null, ShowFormatting = ShowFormatting, ShowComments = ShowComments, ShowChanges = ShowChanges, ShowBoundaries = ShowBoundaries, SelectedImageId = SelectedImageId }); canvas.Restore();
+            Renderer.DrawPage(canvas, Session.Document, Layout, i, new() { Selection = Session.Selection, DrawCaret = _caretVisible && !Session.IsReadOnly && _selectedObjectId is null && SelectedCells is null, ShowFormatting = ShowFormatting, ShowComments = ShowComments, ShowChanges = ShowChanges, ShowBoundaries = ShowBoundaries, SelectedImageId = SelectedImageId, HiddenObjectId = _visualGesture?.Item.Object.Id });
+            DrawVisualInteraction(canvas, i); canvas.Restore();
             canvas.DrawRect((float)left, (float)top, (float)pageWidth, (float)pageHeight, border);
         }
     }
@@ -201,6 +203,7 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     }
     public void SetZoom(double zoom, Point? anchor = null)
     {
+        CancelVisualGesture(); CancelTableGesture();
         zoom = Math.Clamp(zoom, 0.25, 5); if (Math.Abs(zoom - _zoom) < 0.0001) return;
         var point = anchor ?? new Point(_canvas.ActualWidth / 2, _canvas.ActualHeight / 2); var logicalY = (point.Y - 18 + _scrollY) / Scale; _zoom = zoom; _scrollY = logicalY * Scale - point.Y + 18;
         ClampScroll(); UpdateRuler(); UpdateInputPosition(); Invalidate(); ViewChanged?.Invoke();
@@ -228,6 +231,6 @@ public sealed partial class DocumentSurface : UserControl, IDisposable
     private void Try(Action action) { try { action(); } catch (Exception ex) { Error?.Invoke(ex.Message); SyncInput(); } }
     public new void Dispose()
     {
-        if (_disposed) return; _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _inputText.Dispose(); _input.PreviewKeyDown -= OnInputKeyDown; _input.PreviewKeyUp -= OnInputKeyUp; _canvas.Draw = null; Renderer.Dispose();
+        if (_disposed) return; CancelObjectEditor(); CancelVisualGesture(); CancelTableGesture(); _disposed = true; _caretTimer.Stop(); Session.Changed -= OnSessionChanged; _inputText.Dispose(); _input.PreviewKeyDown -= OnInputKeyDown; _input.PreviewKeyUp -= OnInputKeyUp; _canvas.Draw = null; Renderer.Dispose();
     }
 }

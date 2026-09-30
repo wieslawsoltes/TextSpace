@@ -179,14 +179,15 @@ public sealed partial class WordWorkbench
         var dialog = new OfficeDialog("Welcome to TextSpace", "Start writing", 540);
         dialog.AddDescription("Click on the paper to write. Drag to select text, double-click to select a word, and use the ribbon to format your document. Tab moves between table cells.");
         dialog.AddDescription("File opens templates, import, export, and local version history. AutoSave writes to this device only. Download .textspace files for complete copies; DOCX and PDF make your work portable.");
-        dialog.AddDescription("This is an independent development release, not Microsoft Word. It does not yet support full Word layout, collaboration, macros, equations, footnotes, floating shapes, or lossless DOCX round-tripping. Disabled commands indicate unsupported features rather than simulated results.");
+        dialog.AddDescription("This is an independent development release, not Microsoft Word. It does not yet support full Word layout, collaboration, macros, footnotes, tight text wrapping, grouped drawings, or lossless DOCX round-tripping. Disabled commands indicate unsupported features rather than simulated results.");
+        dialog.AddDescription("Insert Shapes or Equation for direct object editing. Drag resize/rotation handles; double-click for text or structural math. Matrix Layout inserts and removes rows or columns. Done applies a draft; Escape cancels. Picture Format offers nondestructive Crop and Reset Crop.");
         await ShowDialogAsync(dialog);
     }
     private async Task AboutAsync()
     {
         var dialog = new OfficeDialog("About TextSpace", "Close", 530);
         dialog.Body.Children.Add(OfficeTheme.Text("TextSpace", 30, OfficeTheme.Accent, true));
-        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.5.0-alpha.1.");
+        dialog.AddDescription("A local-first word processor built with Uno Platform, .NET, SkiaSharp and HarfBuzz. Version 0.6.0-alpha.1.");
         dialog.AddDescription("Original office-style controls and reusable document libraries. Open-source font substitutes are included; Microsoft fonts and branding are not distributed.");
         dialog.AddDescription("TextSpace is not affiliated with Microsoft. Microsoft Word and Microsoft 365 are trademarks of Microsoft. Source code: MIT License.");
         dialog.AddDescription("Recovery storage: " + Host.StorageDescription + ". No document upload, account, analytics, or AI service is required."); await ShowDialogAsync(dialog);

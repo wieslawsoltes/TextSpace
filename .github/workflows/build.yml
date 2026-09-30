@@ -27,8 +27,15 @@ jobs:
         run: |
           set -euo pipefail
           dotnet build benchmarks/TextSpace.Performance -c Release
-          DOTNET_TieredCompilation=0 DOTNET_ReadyToRun=0 dotnet run --project benchmarks/TextSpace.Performance -c Release --no-build -- --tab-validation > artifacts/tests/tab-validation.json
+          GITHUB_SHA="$(git rev-parse HEAD)" DOTNET_TieredCompilation=0 DOTNET_ReadyToRun=0 dotnet run --project benchmarks/TextSpace.Performance -c Release --no-build -- --tab-validation > artifacts/tests/tab-validation.json
           cat artifacts/tests/tab-validation.json
+      - name: Record visual typography and query samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build benchmarks/TextSpace.VisualPerformance -c Release
+          GITHUB_SHA="$(git rev-parse HEAD)" DOTNET_TieredCompilation=0 DOTNET_ReadyToRun=0 dotnet run --project benchmarks/TextSpace.VisualPerformance -c Release --no-build > artifacts/tests/visual-performance.json
+          cat artifacts/tests/visual-performance.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

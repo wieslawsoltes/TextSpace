@@ -11,6 +11,7 @@ internal sealed class TableLayouter(ParagraphLayoutCache paragraphs, TextIndex i
         public List<LayoutLine> Lines = [];
         public List<LayoutCell> Cells = [];
         public List<LayoutImage> Images = [];
+        public List<LayoutObject> Objects = [];
     }
     public TableFlowLayout Measure(TableBlock table, double width, int depth = 0)
     {
@@ -56,10 +57,12 @@ internal sealed class TableLayouter(ParagraphLayoutCache paragraphs, TextIndex i
             var offset = cell.VerticalAlignment == CellVerticalAlignment.Center ? remaining / 2 : cell.VerticalAlignment == CellVerticalAlignment.Bottom ? remaining : 0;
             var dx = x[region.Column] + padding; var dy = y[region.Row] + padding + offset;
             var fill = cell.Shading ?? (table.HeaderRow && region.Row == 0 ? "#D9E5F5" : table.BandedRows && region.Row % 2 == 0 ? "#F3F6FA" : null);
-            result.Cells.Add(new(table.Id, new(x[region.Column], y[region.Row], x[region.ColumnEnd] - x[region.Column], cellHeight), fill, table.HeaderRow && region.Row == 0));
-            foreach (var nested in item.Content.Cells) result.Cells.Add(nested with { Bounds = new(nested.Bounds.X + dx, nested.Bounds.Y + dy, nested.Bounds.Width, nested.Bounds.Height) });
+            result.Cells.Add(new(table.Id, new(x[region.Column], y[region.Row], x[region.ColumnEnd] - x[region.Column], cellHeight), fill, table.HeaderRow && region.Row == 0)
+            { Row = region.Row, Column = region.Column, RowSpan = region.RowSpan, ColumnSpan = region.ColumnSpan, TableWidth = width, LogicalHeight = cellHeight });
+            foreach (var nested in item.Content.Cells) result.Cells.Add(nested with { TableLeft = nested.TableLeft + dx, Bounds = new(nested.Bounds.X + dx, nested.Bounds.Y + dy, nested.Bounds.Width, nested.Bounds.Height) });
             foreach (var line in item.Content.Lines) result.Lines.Add(LayoutGeometry.Copy(line, dx, dy, 0));
             foreach (var image in item.Content.Images) result.Images.Add(image with { Bounds = new(image.Bounds.X + dx, image.Bounds.Y + dy, image.Bounds.Width, image.Bounds.Height) });
+            foreach (var itemObject in item.Content.Objects) result.Objects.Add(itemObject with { Bounds = new(itemObject.Bounds.X + dx, itemObject.Bounds.Y + dy, itemObject.Bounds.Width, itemObject.Bounds.Height) });
         }
         result.BuildIndexes(); return result;
     }
@@ -86,12 +89,13 @@ internal sealed class TableLayouter(ParagraphLayoutCache paragraphs, TextIndex i
                     foreach (var line in layout.Lines) result.Lines.Add(LayoutGeometry.Copy(line, 0, result.Height, 0));
                     foreach (var cell in layout.Cells) result.Cells.Add(cell with { Bounds = new(cell.Bounds.X, cell.Bounds.Y + result.Height, cell.Bounds.Width, cell.Bounds.Height) });
                     foreach (var image in layout.Images) result.Images.Add(image with { Bounds = new(image.Bounds.X, image.Bounds.Y + result.Height, image.Bounds.Width, image.Bounds.Height) });
+                    foreach (var itemObject in layout.Objects) result.Objects.Add(itemObject with { Bounds = new(itemObject.Bounds.X, itemObject.Bounds.Y + result.Height, itemObject.Bounds.Width, itemObject.Bounds.Height) });
                     result.Height += layout.Height + 8; break;
-                case ImageBlock image:
-                    var ratio = Math.Min(1, Math.Min(width / image.Width, maximumImageHeight / image.Height));
-                    var w = image.Width * ratio; var h = image.Height * ratio;
-                    var left = image.Alignment == TextAlignment.Center ? (width - w) / 2 : image.Alignment == TextAlignment.Right ? width - w : 0;
-                    result.Images.Add(new(image, new(left, result.Height, w, h))); result.Height += h + 8; break;
+                case VisualBlock visual:
+                    var bounds = VisualGeometry.Place(visual, width, maximumImageHeight, 0, result.Height);
+                    result.Objects.Add(new(visual, bounds));
+                    if (visual is ImageBlock visualImage) result.Images.Add(new(visualImage, bounds));
+                    result.Height += bounds.Height + Math.Max(0, visual.Placement.Y) + 8; break;
             }
         }
         return result;

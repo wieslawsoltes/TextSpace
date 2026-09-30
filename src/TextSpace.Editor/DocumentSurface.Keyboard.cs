@@ -37,6 +37,8 @@ public sealed partial class DocumentSurface
         // owned by a document command, and commit pending text before a new command.
         if (_ownsNativeInput) FinishInputCommand();
         var control = ControlDown();
+        if (TryVisualKey(e)) return;
+        if (KeyDown(VirtualKey.Menu) && e.Key == (VirtualKey)187) { CommandRequested?.Invoke("insert-equation"); e.Handled = true; return; }
         if (!IsDocumentKey(e.Key, control)) return;
         CommitNativeInput();
         var shift = KeyDown(VirtualKey.Shift); var position = Session.Selection.Active; var index = Session.Index;
