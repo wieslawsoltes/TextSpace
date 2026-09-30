@@ -1,4 +1,4 @@
-"""Guarded integration of visual editing checks. Removed after application."""
+"""Apply guarded source-only integration; workflow changes use the repository API."""
 from pathlib import Path
 changes = {}
 def read(path): return changes.get(path, Path(path).read_text())
@@ -23,8 +23,8 @@ replace('src/TextSpace.OpenXml/DocxReader.Visuals.cs', '            if ((floatin
 replace('src/TextSpace.Editor/DocumentSurface.Visuals.cs', '    public string? SelectedObjectId => _selectedObjectId;', '    public string? SelectedObjectId => _selectedObjectId;\n    public bool IsBodyInputReadOnly => _input.IsReadOnly;')
 replace('src/TextSpace.App/Platforms/WebAssembly/BrowserDiagnostics.Visuals.cs', '        json.WriteStartObject("visuals"); json.WriteString("selected", state.SelectedObjectId);', '        json.WriteStartObject("visuals"); json.WriteString("selected", state.SelectedObjectId);\n        json.WriteBoolean("bodyReadOnly", workbench.Surface.IsBodyInputReadOnly);')
 replace('scripts/visual-editing-check.mjs', 'document.activeElement.readOnly === readOnly, readOnly)', '(readOnly === null || document.activeElement.readOnly === readOnly), readOnly)')
-replace('scripts/visual-editing-check.mjs', '  await nativeReady(true);', '''  // Native textarea flags are not a contract of Uno's Skia TextBox. Observe
-  // focus separately and verify that actual body input is rejected in object mode.
+replace('scripts/visual-editing-check.mjs', '  await nativeReady(true);', '''  // Observe native focus separately from managed TextBox state, then exercise
+  // actual input to prove that object selection cannot mutate body text.
   await nativeReady(null);
   await until(async () => (await state()).visuals.bodyReadOnly, 'Managed body input must be read-only for object selection');
   const before = await state();
@@ -52,18 +52,25 @@ replace('scripts/visual-editing-check.mjs', "  await check('picture crop is nond
     assert.equal((await object(equationId)).text, '(a+b)/(c)');
   });
   await check('picture crop is nondestructive and resettable', async () => {''')
-replace('.github/workflows/build.yml', '          cat artifacts/tests/tab-validation.json\n', '''          cat artifacts/tests/tab-validation.json
-      - name: Record visual typography and query samples
-        shell: bash
-        run: |
-          set -euo pipefail
-          dotnet build benchmarks/TextSpace.VisualPerformance -c Release
-          DOTNET_TieredCompilation=0 DOTNET_ReadyToRun=0 dotnet run --project benchmarks/TextSpace.VisualPerformance -c Release --no-build > artifacts/tests/visual-performance.json
-          cat artifacts/tests/visual-performance.json
-''')
 replace('Directory.Build.props', '<Version>0.5.1-alpha.1</Version>', '<Version>0.6.0-alpha.1</Version>')
-replace('.github/workflows/release.yml', 'default: 0.5.1-alpha.1', 'default: 0.6.0-alpha.1')
-for path, text in changes.items(): Path(path).write_text(text)
+replace('README.md', '**Development preview: 0.5.1-alpha.1.**', '**Development preview: 0.6.0-alpha.1.**')
+replace('README.md', '## Download\n', '''### Direct object and equation editing
+
+**Insert → Shapes / Equation** adds editable retained content. Select an object on the paper to move, resize or rotate it; use **Picture Format → Crop** for nondestructive picture cropping. Double-click a shape or equation to edit its detached draft. Done applies one document transaction; Escape discards the draft.
+
+The equation editor exposes measured fraction, radical, script, matrix, delimiter, operator and accent slots with local undo/redo. Matrix Layout changes rows and columns without flattening the expression. DOCX exports editable DrawingML and Office Math; HTML exports SVG and presentation MathML. Table boundaries can be resized on the page, and Alt-drag selects a cell rectangle.
+
+See [WYSIWYG objects, tables and equations](docs/WYSIWYG-OBJECTS.md) for reusable APIs, keyboard interaction, performance ownership and explicit compatibility boundaries. These features remain subject to exact-commit browser and native build validation; source version alone does not establish a public deployment.
+
+## Download
+''')
+replace('src/TextSpace.Workbench/WordWorkbench.Dialogs.cs', 'collaboration, macros, equations, footnotes, floating shapes, or lossless DOCX round-tripping.', 'collaboration, macros, footnotes, tight text wrapping, grouped drawings, or lossless DOCX round-tripping.')
+replace('src/TextSpace.Workbench/WordWorkbench.Dialogs.cs', 'Version 0.5.0-alpha.1.', 'Version 0.6.0-alpha.1.')
+replace('src/TextSpace.Workbench/WordWorkbench.Dialogs.cs', '        await ShowDialogAsync(dialog);\n    }\n    private async Task AboutAsync()', '        dialog.AddDescription("Insert Shapes or Equation for direct object editing. Drag resize/rotation handles; double-click for text or structural math. Matrix Layout inserts and removes rows or columns. Done applies a draft; Escape cancels. Picture Format offers nondestructive Crop and Reset Crop.");\n        await ShowDialogAsync(dialog);\n    }\n    private async Task AboutAsync()')
+# Preserve every workflow file: GITHUB_TOKEN cannot rewrite workflow definitions.
+# The connected repository API removes this temporary workflow after validation.
+for path, text in changes.items():
+    assert not path.startswith('.github/'), path
+    Path(path).write_text(text)
 Path('scripts/complete-visual-editing.py').unlink()
-Path('.github/workflows/complete-visual-editing.yml').unlink()
-print('Integrated visual validation, standard-first placement, input ownership and benchmark. Temporary files removed.')
+print('Integrated source-only visual validation, placement, input tests and documentation. Workflow definitions unchanged.')
