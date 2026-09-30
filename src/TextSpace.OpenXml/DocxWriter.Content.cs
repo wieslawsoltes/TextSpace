@@ -17,7 +17,7 @@ public sealed partial class DocxWriter
                 case Paragraph p: yield return WriteParagraph(p); break;
                 case PageBreakBlock: yield return E("p", E("r", E("br", new XAttribute(W + "type", "page")))); break;
                 case ColumnBreakBlock: yield return E("p", E("r", E("br", new XAttribute(W + "type", "column")))); break;
-                case ImageBlock image: yield return Picture(image); break;
+                case VisualBlock visual: yield return VisualObject(visual); break;
                 case TableBlock table: yield return Table(table); break;
             }
         }
