@@ -15,22 +15,24 @@ public static class VisualBlockRules
                 if (image.Data is null || image.Crop is not { } c || !double.IsFinite(c.Left + c.Top + c.Right + c.Bottom)
                     || c.Left < 0 || c.Top < 0 || c.Right < 0 || c.Bottom < 0 || c.Left + c.Right >= 0.99 || c.Top + c.Bottom >= 0.99)
                     throw new InvalidDataException("Invalid non-destructive picture crop.");
+                if (!VisualTextRules.IsValid(image.AltText, 100000)) throw new InvalidDataException("Invalid picture alternative text.");
                 break;
             case EquationBlock equation:
                 if (!double.IsFinite(equation.FontSize) || equation.FontSize is < 6 or > 200 || !IsColor(equation.Color))
                     throw new InvalidDataException("Invalid equation formatting.");
                 EquationRules.Validate(equation.Root); break;
             case ShapeBlock shape:
-                if (!Enum.IsDefined(shape.Kind) || !Enum.IsDefined(shape.VerticalAlignment) || shape.Text is null || shape.Text.Length > 100000
+                if (!Enum.IsDefined(shape.Kind) || !Enum.IsDefined(shape.VerticalAlignment) || !VisualTextRules.IsValid(shape.Text, 100000)
                     || shape.TextStyle is null || !double.IsFinite(shape.TextStyle.FontSize) || shape.TextStyle.FontSize is < 1 or > 400
+                    || string.IsNullOrWhiteSpace(shape.TextStyle.FontFamily) || !VisualTextRules.IsValid(shape.TextStyle.FontFamily, 256, false)
+                    || !IsColor(shape.TextStyle.Color) || shape.TextStyle.Highlight is not null && !IsColor(shape.TextStyle.Highlight)
                     || !IsColor(shape.Stroke) || shape.Fill is not null && !IsColor(shape.Fill)
                     || !double.IsFinite(shape.StrokeWidth + shape.Padding + shape.CornerRadius) || shape.StrokeWidth is < 0 or > 72
                     || shape.Padding is < 0 or > 72 || shape.CornerRadius is < 0 or > 4000)
-                    throw new InvalidDataException("Invalid shape formatting.");
+                    throw new InvalidDataException("Invalid shape formatting or text.");
                 break;
         }
     }
-
     public static bool IsColor(string? value) => value is not null && (value.Length == 7 || value.Length == 9)
         && value[0] == '#' && value.AsSpan(1).ContainsAnyExcept("0123456789abcdefABCDEF".AsSpan()) == false;
 }
