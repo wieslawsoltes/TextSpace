@@ -56,35 +56,8 @@ public sealed partial class DocumentSurface
         if (Session.IsReadOnly || SelectedObject is not ImageBlock) return;
         _cropMode = !_cropMode; Invalidate(); ObjectSelectionChanged?.Invoke(); FocusEditor();
     }
-    private DocumentLayout? _indexedVisualLayout;
-    private readonly Dictionary<string, (int Page, LayoutObject Item)> _visualLocations = new(StringComparer.Ordinal);
-    private (int Page, LayoutObject Item)? SelectedPlacement()
-    {
-        if (_selectedObjectId is null) return null;
-        if (!ReferenceEquals(_indexedVisualLayout, Layout))
-        {
-            _visualLocations.Clear();
-            foreach (var item in VisualObjects()) if (!item.Item.IsReplica) _visualLocations.TryAdd(item.Item.Object.Id, item);
-            _indexedVisualLayout = Layout;
-        }
-        return _visualLocations.TryGetValue(_selectedObjectId, out var value) ? value : null;
-    }
-    private IEnumerable<(int Page, LayoutObject Item)> PageVisualObjects(int index)
-    {
-        var page = Layout.Pages[index];
-        if (page.Objects.Count > 0)
-        {
-            foreach (var item in page.Objects) yield return (index, item);
-        }
-        else foreach (var image in page.Images) yield return (index, new LayoutObject(image.Image, image.Bounds) { IsReplica = image.IsReplica });
-    }
     private Point PagePoint(Point point, int page) => new((point.X - PaperLeft) / Scale - Layout.PageLeft(page),
         (point.Y - 18 + _scrollY) / Scale - Layout.PageTop(page));
-    private bool ContainsVisual(LayoutObject item, Point point)
-    {
-        var local = VisualGeometry.Local(item.Bounds, point.X, point.Y, item.Object.Placement.Rotation);
-        return local.X >= 0 && local.Y >= 0 && local.X <= item.Bounds.Width && local.Y <= item.Bounds.Height;
-    }
     private VisualHandle HandleAt(LayoutObject item, Point point, double tolerance)
     {
         var p = VisualGeometry.Local(item.Bounds, point.X, point.Y, item.Object.Placement.Rotation);
@@ -102,19 +75,13 @@ public sealed partial class DocumentSurface
         if (!right && !Session.IsReadOnly && SelectedPlacement() is { } selected)
         {
             var p = PagePoint(position, selected.Page); var handle = HandleAt(selected.Item, p, (point.PointerDeviceType == PointerDeviceType.Touch ? 12 : 6) / Scale);
-            if (handle != VisualHandle.None)
-            {
-                BeginVisualGesture(selected, handle, p, e); return true;
-            }
+            if (handle != VisualHandle.None) { BeginVisualGesture(selected, handle, p, e); return true; }
         }
         var page = Layout.PageAtY((position.Y - 18 + _scrollY) / Scale); var pagePoint = PagePoint(position, page);
-        var items = PageVisualObjects(page).Where(i => !i.Item.IsReplica).ToArray();
-        var hit = items.Reverse().FirstOrDefault(i => i.Item.Object.Placement.Floating && ContainsVisual(i.Item, pagePoint));
-        if (hit.Item is null) hit = items.Reverse().FirstOrDefault(i => ContainsVisual(i.Item, pagePoint));
-        if (hit.Item is null) return false;
+        if (!ObjectIndex.TryHitTest(page, pagePoint.X, pagePoint.Y, out var hit)) return false;
         SelectObject(hit.Item.Object.Id);
         if (right) ContextRequested?.Invoke(position);
-        else if (!Session.IsReadOnly) BeginVisualGesture(hit, VisualHandle.Move, pagePoint, e);
+        else if (!Session.IsReadOnly) BeginVisualGesture((hit.PageIndex, hit.Item), VisualHandle.Move, pagePoint, e);
         else FocusEditor();
         e.Handled = true; return true;
     }
@@ -136,14 +103,7 @@ public sealed partial class DocumentSurface
         gesture.GuideX = gesture.GuideY = null;
         if (IsCropping && value is ImageBlock image && original is ImageBlock source && gesture.Handle is not (VisualHandle.Move or VisualHandle.Rotate))
         {
-            var delta = VisualGeometry.Rotate(dx, dy, -placement.Rotation); var crop = source.Crop;
-            var left = crop.Left; var top = crop.Top; var right = crop.Right; var bottom = crop.Bottom;
-            var horizontal = delta.X / bounds.Width * (1 - left - right); var vertical = delta.Y / bounds.Height * (1 - top - bottom);
-            if (gesture.Handle is VisualHandle.NorthWest or VisualHandle.West or VisualHandle.SouthWest) left = Math.Clamp(left + horizontal, 0, 0.98 - right);
-            if (gesture.Handle is VisualHandle.NorthEast or VisualHandle.East or VisualHandle.SouthEast) right = Math.Clamp(right - horizontal, 0, 0.98 - left);
-            if (gesture.Handle is VisualHandle.NorthWest or VisualHandle.North or VisualHandle.NorthEast) top = Math.Clamp(top + vertical, 0, 0.98 - bottom);
-            if (gesture.Handle is VisualHandle.SouthWest or VisualHandle.South or VisualHandle.SouthEast) bottom = Math.Clamp(bottom - vertical, 0, 0.98 - top);
-            image.Crop = new() { Left = left, Top = top, Right = right, Bottom = bottom };
+            image.Crop = VisualCropGeometry.Drag(source.Crop, gesture.Handle, dx, dy, bounds.Width, bounds.Height, placement);
         }
         else if (gesture.Handle == VisualHandle.Move)
         {
@@ -199,21 +159,22 @@ public sealed partial class DocumentSurface
     private bool TryVisualDoubleTap(Point point)
     {
         var page = Layout.PageAtY((point.Y - 18 + _scrollY) / Scale); var p = PagePoint(point, page);
-        var item = PageVisualObjects(page).Reverse().FirstOrDefault(i => !i.Item.IsReplica && ContainsVisual(i.Item, p));
-        if (item.Item is null) return false;
+        if (!ObjectIndex.TryHitTest(page, p.X, p.Y, out var item)) return false;
         CancelVisualGesture(); SelectObject(item.Item.Object.Id);
         if (item.Item.Object is ShapeBlock or EquationBlock) BeginObjectEditor(); else ToggleCrop(); return true;
     }
     private bool TryVisualKey(KeyRoutedEventArgs e)
     {
         if (_objectEditor is not null) { e.Handled = true; return true; }
+        if (e.Key == VirtualKey.F10 && KeyDown(VirtualKey.Menu)) { CommandRequested?.Invoke("selection-pane"); e.Handled = true; return true; }
         if (e.Key == VirtualKey.Escape && (_visualGesture is not null || _tableGesture is not null))
         { CancelVisualGesture(); CancelTableGesture(); e.Handled = true; return true; }
         if (_selectedObjectId is null) return false;
         var id = _selectedObjectId; var control = ControlDown(); var shift = KeyDown(VirtualKey.Shift);
         try
         {
-            if (e.Key == VirtualKey.Escape) { SelectObject(null); FocusEditor(); }
+            if (e.Key == VirtualKey.Tab && !control && !KeyDown(VirtualKey.Menu)) SelectNextObject(shift);
+            else if (e.Key == VirtualKey.Escape) { SelectObject(null); FocusEditor(); }
             else if (e.Key is VirtualKey.Enter or VirtualKey.F2) BeginObjectEditor();
             else if (control && e.Key == VirtualKey.D) { SelectObject(Session.DuplicateVisual(id), true); }
             else if (e.Key is VirtualKey.Delete or VirtualKey.Back) { Session.DeleteVisual(id); SelectObject(null); }
