@@ -6,7 +6,7 @@ def replace(path, old, new, count=1):
     text = read(path)
     if text.count(old) != count: raise RuntimeError((path, text.count(old), old[:120]))
     changes[path] = text.replace(old, new)
-replace('src/TextSpace.Core/EquationNode.cs', '!WellFormed(node.Text) || node.Text.Any(c => char.IsControl(c) && c != \'\\u2028\')', '!VisualTextRules.IsValid(node.Text, MaximumCharacters, false)')
+replace('src/TextSpace.Core/EquationNode.cs', 'node.Text.Any(c => char.IsControl(c)) || !WellFormed(node.Text)', '!VisualTextRules.IsValid(node.Text, MaximumCharacters, false)')
 replace('src/TextSpace.OpenXml/DocxWriter.Visuals.cs', 'new XAttribute("standardX", Invariant(', 'new XAttribute("standardWidth", Invariant(block.Width)), new XAttribute("standardHeight", Invariant(block.Height)),\n                new XAttribute("standardFloating", block.Placement.Floating ? "1" : "0"),\n                new XAttribute("standardX", Invariant(')
 replace('src/TextSpace.OpenXml/DocxReader.Visuals.cs', '        var native = properties?.Element(A + "extLst")', '''        var supportedCoordinateFrame = !floating ||
             (string?)frame.Element(Wp + "positionH")?.Attribute("relativeFrom") == "column"
