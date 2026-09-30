@@ -29,7 +29,22 @@ async function click(name) {
 async function inputReady() {
   await until(() => page.evaluate(() => document.hasFocus() && document.activeElement?.id === 'uno-input'), 'Native input did not acquire focus');
 }
-async function fill(name, value) { await click(name); await inputReady(); await page.keyboard.press('Control+a'); await page.keyboard.insertText(value); }
+async function fieldReady(name, expected = null) {
+  await until(() => page.evaluate(({ name, expected }) => {
+    const field = globalThis.__textSpaceState?.controls.findLast(c => c.name === name && c.kind === 'textbox');
+    const input = document.activeElement;
+    return field?.enabled && field.focused && !field.readOnly && document.hasFocus()
+      && input?.id === 'uno-input' && !input.readOnly && input.value === field.value
+      && (expected === null || field.value === expected);
+  }, { name, expected }), 'Managed/native field was not ready: ' + name);
+}
+async function fill(name, value) {
+  await click(name); await fieldReady(name);
+  await page.keyboard.press('Control+a');
+  // insertText('') sends no deletion; clearing must exercise the keyboard edit.
+  if (value === '') await page.keyboard.press('Backspace'); else await page.keyboard.insertText(value);
+  await fieldReady(name, value);
+}
 async function save(name) {
   await click('File tab'); await click('File Save As');
   const pending = page.waitForEvent('download'); await click('TextSpace document'); const file = await pending;
@@ -100,10 +115,22 @@ try {
   await check('object search filters the list and explicit editing preserves the body', async () => {
     await fill('Find object', 'Ellipse');
     await until(async () => !(await state()).controls.some(c => c.name === 'Select object: ' + first) && (await state()).controls.some(c => c.name === 'Select object: ' + second), 'Object filter did not update');
-    await click('Select object: ' + second); const text = (await state()).text;
-    await click('Edit selected'); await fill('Shape text', 'Searchable ellipse'); await click('Apply shape text');
-    await until(async () => (await state()).visuals.objects.some(o => o.id === second && o.text === 'Searchable ellipse'), 'Pane edit failed');
-    assert.equal((await state()).text, text); await fill('Find object', '');
+    await click('Select object: ' + second);
+    await until(async () => (await state()).visuals.selected === second, 'Filtered object was not selected');
+    const before = await state();
+    await click('Edit selected');
+    await until(async () => (await state()).visuals.editor, 'Pane editor did not open');
+    await fill('Shape text', 'Searchable ellipse');
+    assert.equal((await state()).revision, before.revision, 'Typing a shape draft changed document history before Apply');
+    assert.equal((await state()).text, before.text, 'Shape draft typing changed body text');
+    await click('Apply shape text');
+    await until(async () => {
+      const s = await state();
+      return !s.visuals.editor && s.revision === before.revision + 1
+        && s.visuals.objects.some(o => o.id === second && o.text === 'Searchable ellipse');
+    }, 'Pane edit must commit exactly once and preserve the selected object');
+    assert.equal((await state()).text, before.text); await fill('Find object', '');
+    await until(async () => (await state()).controls.filter(c => c.name.startsWith('Select object: ')).length === 2, 'Clearing the filter must restore both objects');
     await page.screenshot({ path: output + '/selection-pane.png' }); await click('Close Selection');
     baseline = await save('two-objects');
   });
