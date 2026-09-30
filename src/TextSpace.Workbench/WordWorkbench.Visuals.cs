@@ -20,6 +20,7 @@ public sealed partial class WordWorkbench
         Ribbon.InsertGroup("Table Layout", 4, () => Group("Cell Size",
             Tool("columns", "Distribute Columns", "distribute-columns", true), Tool("row", "Distribute Rows", "distribute-rows", true)));
         Surface.ObjectSelectionChanged += RefreshVisualRibbon;
+        InitializeObjectNavigation();
     }
     private RibbonButton ShapeGallery()
     {
@@ -119,10 +120,12 @@ public sealed partial class WordWorkbench
         if (_objectY is not null) _objectY.Value = (block?.Placement.Y ?? 0).ToString("0.##", CultureInfo.InvariantCulture);
         foreach (var id in new[] { "duplicate-object", "delete-object", "edit-object", "object-before", "object-after", "shape-bold", "shape-italic", "crop-picture", "reset-crop" })
             if (_buttons.TryGetValue(id, out var button)) button.IsEnabled = block is not null && !Session.IsReadOnly;
+        RefreshObjectSelectionPane();
         StateChanged?.Invoke();
     }
     private bool ExecuteVisualCommand(string id)
     {
+        if (id == "selection-pane") { ShowObjectSelectionPane(); return true; }
         if (id.StartsWith("insert-shape:", StringComparison.Ordinal))
         {
             var kind = Enum.Parse<ShapeKind>(id[13..]); var selected = Session.InsertShape(kind);
@@ -163,7 +166,7 @@ public sealed partial class WordWorkbench
         if (block is ShapeBlock or EquationBlock) menu.Add(block is EquationBlock ? "Edit Equation" : "Edit Text", () => Surface.BeginObjectEditor(), "font", "Enter");
         if (block is ImageBlock) menu.Add("Crop", () => Surface.ToggleCrop(), "image").Add("Reset Crop", () => _ = ExecuteCommandAsync("reset-crop"));
         menu.Add("Duplicate", () => _ = ExecuteCommandAsync("duplicate-object"), "copy", "Ctrl+D").Add("Delete", () => _ = ExecuteCommandAsync("delete-object"), "close", "Delete")
-            .Separator().Add("Rotate Right 90°", () => RotateObject(90)).Add("In Line with Text", () => SetObjectFloating(false)).Add("In Front of Text", () => SetObjectFloating(true));
+            .Separator().Add("Selection Pane", ShowObjectSelectionPane).Add("Rotate Right 90°", () => RotateObject(90)).Add("In Line with Text", () => SetObjectFloating(false)).Add("In Front of Text", () => SetObjectFloating(true));
         menu.AsFlyout().ShowAt(Surface); return true;
     }
 }
