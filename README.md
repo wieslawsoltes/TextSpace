@@ -18,7 +18,7 @@ Rich text · Paginated paper · Familiar office workflows · Reusable .NET compo
 
 ---
 
-TextSpace is an independent, local-first word processor built in **C#**, **Uno Platform**, **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are reusable controls—not an embedded web editor or a screenshot of another application.
+TextSpace is an independent, local-first word processor built in **C#**, [**Uno Platform**](https://platform.uno), **SkiaSharp**, and **HarfBuzz**. Its ribbon, editing surface, navigation panes, review tools and file workflows are reusable controls—not an embedded web editor or a screenshot of another application.
 
 > **Development preview: 0.5.1-alpha.1.** This is not Microsoft Word. Complete feature parity, identical pagination, pixel-identical appearance and lossless DOCX round-tripping are not implemented. Keep independent file copies of important documents. The live site's version is determined by its last successful Pages deployment, not this source version alone.
 
